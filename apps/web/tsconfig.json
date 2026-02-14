@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client", "react", "react-dom"],
+    "paths": {
+      "@landing/data": ["../../packages/data/src/index.ts"],
+      "@landing/engine": ["../../packages/engine/src/index.ts"],
+      "@landing/ui-types": ["../../packages/ui-types/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}
