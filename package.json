@@ -9,8 +9,10 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @landing/web",
+    "dev:lan": "npm run dev:lan --workspace @landing/web",
     "build": "npm run build --workspace @landing/ui-types && npm run build --workspace @landing/engine && npm run build --workspace @landing/data && npm run build --workspace @landing/web",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "preview:lan": "npm run preview:lan --workspace @landing/web"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

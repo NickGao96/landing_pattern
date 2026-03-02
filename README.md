@@ -56,6 +56,58 @@ npm run dev
 
 Then open the printed local URL (default Vite URL).
 
+## Access From Phone (LAN/Hotspot)
+
+Use this mode when your phone and laptop are on the same network (Wi-Fi or personal hotspot):
+
+```bash
+npm run dev:lan
+```
+
+Find your laptop IP:
+
+```bash
+ipconfig getifaddr en0
+```
+
+Fallback if needed:
+
+```bash
+ifconfig | grep "inet "
+```
+
+Open this on your phone browser:
+
+```text
+http://<laptop-ip>:5173
+```
+
+Hotspot note: this works only if the hotspot allows client-to-client traffic.
+
+### Phone check with preview build
+
+```bash
+npm run build
+npm run preview:lan
+```
+
+Then open:
+
+```text
+http://<laptop-ip>:4173
+```
+
+### Troubleshooting
+
+- Keep phone and laptop on the same network/subnet.
+- Disable VPN on laptop/phone if routing looks wrong.
+- Allow Node/Vite through local firewall.
+- Some hotspot/network configurations block client isolation (peer access).
+
+### Safety note
+
+Do not router port-forward this PoC.
+
 ## Optional Mapbox backup
 
 Set in shell before `npm run dev`:
