@@ -4,3 +4,16 @@ coverage
 .vite
 .DS_Store
 *.log
+
+# Xcode / SwiftPM generated files
+.build/
+.swiftpm/
+.deriveddata/
+.sourcepackages/
+DerivedData/
+xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+
+# XcodeGen generated project (source of truth is apps/ios/project.yml)
+apps/ios/LandingPattern.xcodeproj/

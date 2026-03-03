@@ -16,6 +16,7 @@ function renderApp() {
 beforeEach(async () => {
   localStorage.clear();
   useAppStore.setState({
+    language: "en",
     unitSystem: "imperial",
     location: { lat: 37.4419, lng: -122.143, source: "default" },
     touchdown: { lat: 37.4419, lng: -122.143 },
@@ -142,5 +143,15 @@ describe("App", () => {
   it("renders test fallback map in jsdom", () => {
     renderApp();
     expect(screen.getByTestId("map-fallback")).toBeInTheDocument();
+  });
+
+  it("switches labels to Chinese", () => {
+    renderApp();
+
+    fireEvent.click(screen.getByLabelText("中文"));
+
+    expect(screen.getByText("语言")).toBeInTheDocument();
+    expect(screen.getByLabelText("出舱重量 (lb)")).toBeInTheDocument();
+    expect(screen.getByText("着陆航线模拟器")).toBeInTheDocument();
   });
 });

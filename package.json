@@ -9,8 +9,16 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @landing/web",
+    "dev:lan": "npm run dev:lan --workspace @landing/web",
     "build": "npm run build --workspace @landing/ui-types && npm run build --workspace @landing/engine && npm run build --workspace @landing/data && npm run build --workspace @landing/web",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "preview:lan": "npm run preview:lan --workspace @landing/web",
+    "fixtures:engine": "npm run build --workspace @landing/engine && node packages/fixtures/engine/generate-fixtures.mjs",
+    "ios:fixtures:sync": "npm run fixtures:engine && cp packages/fixtures/engine/fixtures.json apps/ios/LandingPatternCore/Tests/LandingPatternCoreTests/Fixtures/fixtures.json",
+    "ios:core:test": "cd apps/ios/LandingPatternCore && swift test",
+    "ios:project:generate": "cd apps/ios && xcodegen generate",
+    "ios:app:build:sim": "cd apps/ios && xcodebuild -project LandingPattern.xcodeproj -scheme LandingPattern -configuration Debug -destination 'generic/platform=iOS Simulator' build",
+    "ios:pipeline": "bash scripts/ios_pipeline.sh"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

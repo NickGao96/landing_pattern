@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatternWaypoint, WindLayer } from "@landing/ui-types";
 import { resolveMapFallbackStyle, resolveMapStyle } from "../lib/mapStyle";
+import type { Language } from "../store";
 
 interface MapPanelProps {
+  language: Language;
   touchdown: { lat: number; lng: number };
   waypoints: PatternWaypoint[];
   blocked: boolean;
@@ -16,6 +18,31 @@ interface MapPanelProps {
 const overlaySourceId = "overlay-source";
 const headingHandleDistanceMeters = 180;
 const earthRadiusMeters = 6_371_000;
+const mapTexts: Record<
+  Language,
+  {
+    mapDisabledHeadless: string;
+    touchdown: string;
+    mapFallbackActive: string;
+    windLayers: string;
+    from: string;
+  }
+> = {
+  en: {
+    mapDisabledHeadless: "Map disabled in test/headless mode.",
+    touchdown: "Touchdown",
+    mapFallbackActive: "Map fallback active",
+    windLayers: "Wind Layers",
+    from: "from",
+  },
+  zh: {
+    mapDisabledHeadless: "测试/无头模式下地图已禁用。",
+    touchdown: "着陆点",
+    mapFallbackActive: "地图回退样式已启用",
+    windLayers: "分层风",
+    from: "来自",
+  },
+};
 
 function isHeadlessEnvironment(): boolean {
   if (typeof navigator === "undefined") {
@@ -318,6 +345,7 @@ function ensureOverlayLayers(map: import("maplibre-gl").Map, overlayData: GeoJSO
 }
 
 export function MapPanel({
+  language,
   touchdown,
   waypoints,
   blocked,
@@ -327,6 +355,7 @@ export function MapPanel({
   onTouchdownChange,
   onHeadingChange,
 }: MapPanelProps) {
+  const t = mapTexts[language];
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
   const markerRef = useRef<import("maplibre-gl").Marker | null>(null);
@@ -491,9 +520,9 @@ export function MapPanel({
   if (isHeadlessEnvironment()) {
     return (
       <div className="map-fallback" data-testid="map-fallback">
-        <p>Map disabled in test/headless mode.</p>
+        <p>{t.mapDisabledHeadless}</p>
         <p>
-          Touchdown: {touchdown.lat.toFixed(5)}, {touchdown.lng.toFixed(5)}
+          {t.touchdown}: {touchdown.lat.toFixed(5)}, {touchdown.lng.toFixed(5)}
         </p>
       </div>
     );
@@ -501,10 +530,10 @@ export function MapPanel({
 
   return (
     <div className="map-shell">
-      {mapError ? <p className="map-warning">Map fallback active: {mapError}</p> : null}
+      {mapError ? <p className="map-warning">{t.mapFallbackActive}: {mapError}</p> : null}
       <div ref={mapContainerRef} className="map-container" />
       <div className="map-legend">
-        <h3>Wind Layers</h3>
+        <h3>{t.windLayers}</h3>
         {windLayers.map((layer, index) => (
           <div className="map-legend-row" key={`${index}-${layer.altitudeFt}`}>
             <span
@@ -516,7 +545,7 @@ export function MapPanel({
             </span>
             <span>{Math.round(layer.altitudeFt)} ft</span>
             <span>{layer.speedKt.toFixed(1)} kt</span>
-            <span>from {Math.round(layer.dirFromDeg)}°</span>
+            <span>{t.from} {Math.round(layer.dirFromDeg)}°</span>
           </div>
         ))}
       </div>

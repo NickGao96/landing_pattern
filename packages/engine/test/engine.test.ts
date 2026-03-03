@@ -57,6 +57,15 @@ describe("pattern validation", () => {
     expect(validation.valid).toBe(false);
     expect(validation.errors.some((e) => e.includes("Missing wind layer"))).toBe(true);
   });
+
+  it("flags non-finite wind values", () => {
+    const validation = validatePatternInput({
+      ...baseInput,
+      winds: [{ ...baseInput.winds[0], dirFromDeg: Number.NaN }, ...baseInput.winds.slice(1)],
+    });
+    expect(validation.valid).toBe(false);
+    expect(validation.errors.some((e) => e.includes("Wind layer values must be finite"))).toBe(true);
+  });
 });
 
 describe("computePattern", () => {
@@ -134,6 +143,17 @@ describe("computePattern", () => {
     const final = output.segments.find((segment) => segment.name === "final");
     expect(final?.alongLegSpeedKt ?? 1).toBeLessThan(0);
     expect(output.warnings.some((warning) => warning.includes("Final leg tracks backward"))).toBe(true);
+  });
+
+  it("blocks when wind values are non-finite", () => {
+    const output = computePattern({
+      ...baseInput,
+      winds: [{ ...baseInput.winds[0], dirFromDeg: Number.NaN }, ...baseInput.winds.slice(1)],
+    });
+
+    expect(output.blocked).toBe(true);
+    expect(output.warnings.some((warning) => warning.includes("Wind layer values must be finite"))).toBe(true);
+    expect(output.segments).toHaveLength(0);
   });
 
   it("blocks when wing loading exceeds threshold", () => {

@@ -4,6 +4,7 @@ import type { CanopyProfile, PatternSide, WindLayer } from "@landing/ui-types";
 import { canopyPresets } from "@landing/data";
 
 type UnitSystem = "imperial" | "metric";
+export type Language = "en" | "zh";
 
 interface NamedSpot {
   id: string;
@@ -13,6 +14,7 @@ interface NamedSpot {
 }
 
 interface AppStore {
+  language: Language;
   unitSystem: UnitSystem;
   location: {
     lat: number;
@@ -45,6 +47,7 @@ interface AppStore {
   setWindLayers: (layers: WindLayer[]) => void;
   updateWindLayer: (layerIndex: number, patch: Partial<WindLayer>) => void;
   setUnitSystem: (system: UnitSystem) => void;
+  setLanguage: (language: Language) => void;
   saveNamedSpot: (name: string) => void;
   selectNamedSpot: (id: string) => void;
 }
@@ -67,6 +70,7 @@ const defaultPreset: CanopyProfile = canopyPresets[0] ?? {
 export const useAppStore = create<AppStore>()(
   persist(
     (set, get) => ({
+      language: "en",
       unitSystem: "imperial",
       location: { lat: defaultLat, lng: defaultLng, source: "default" },
       touchdown: { lat: defaultLat, lng: defaultLng },
@@ -139,6 +143,10 @@ export const useAppStore = create<AppStore>()(
         set(() => ({
           unitSystem: system,
         })),
+      setLanguage: (language) =>
+        set(() => ({
+          language,
+        })),
       saveNamedSpot: (name) => {
         const state = get();
         const id = `${Date.now()}`;
@@ -168,6 +176,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: "landing-pattern-store-v1",
       partialize: (state) => ({
+        language: state.language,
         unitSystem: state.unitSystem,
         location: state.location,
         touchdown: state.touchdown,
