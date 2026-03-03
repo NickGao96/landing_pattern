@@ -63,10 +63,6 @@ final class LandingStore: ObservableObject {
     @Published var searchResults: [MKMapItem] = []
     @Published var mapStackChoice: MapStackChoice = .mapKit {
         didSet {
-            if mapStackChoice != .mapKit {
-                mapStackChoice = .mapKit
-                return
-            }
             persistSettings()
         }
     }
@@ -141,21 +137,80 @@ final class LandingStore: ObservableObject {
             return
         }
 
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.resultTypes = [.address, .pointOfInterest]
+        if let coordinate = parseCoordinateQuery(query) {
+            searchResults = []
+            setTouchdown(coordinate)
+            statusMessage = t.locationSet(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude))
+            print("[LocationSearch] Parsed coordinate query '\(query)' -> \(coordinate.latitude), \(coordinate.longitude)")
+            return
+        }
 
-        do {
-            let response = try await MKLocalSearch(request: request).start()
-            searchResults = response.mapItems
-            if let first = response.mapItems.first {
-                setTouchdown(first.placemark.coordinate)
-                statusMessage = t.locationSet(first.name ?? t.selectedResult)
-            } else {
-                statusMessage = t.noLocationResults
+        let candidates = searchCandidates(for: query)
+        var failureReasons: [String] = []
+
+        for candidate in candidates {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = candidate
+            request.resultTypes = [.address, .pointOfInterest]
+            request.region = MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
+                span: MKCoordinateSpan(latitudeDelta: 170, longitudeDelta: 350)
+            )
+            do {
+                let response = try await MKLocalSearch(request: request).start()
+                if let first = selectPreferredMapItem(from: response.mapItems, query: query) {
+                    searchResults = response.mapItems
+                    setTouchdown(first.placemark.coordinate)
+                    let locationName = first.name ?? t.selectedResult
+                    statusMessage = t.locationSet("\(locationName) (\(String(format: "%.5f, %.5f", first.placemark.coordinate.latitude, first.placemark.coordinate.longitude)))")
+                    print("[LocationSearch] MKLocalSearch '\(candidate)' -> \(locationName) @ \(first.placemark.coordinate.latitude), \(first.placemark.coordinate.longitude)")
+                    return
+                }
+            } catch {
+                failureReasons.append("MK[\(candidate)]: \(error.localizedDescription)")
             }
-        } catch {
-            statusMessage = t.locationSearchFailed(error.localizedDescription)
+        }
+
+        for candidate in candidates {
+            do {
+                let placemarks = try await CLGeocoder().geocodeAddressString(candidate)
+                if let coordinate = placemarks.first?.location?.coordinate {
+                    searchResults = []
+                    setTouchdown(coordinate)
+                    let locationName = placemarks.first?.name ?? t.selectedResult
+                    statusMessage = t.locationSet("\(locationName) (\(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)))")
+                    print("[LocationSearch] CLGeocoder '\(candidate)' -> \(locationName) @ \(coordinate.latitude), \(coordinate.longitude)")
+                    return
+                }
+            } catch {
+                failureReasons.append("CL[\(candidate)]: \(error.localizedDescription)")
+            }
+        }
+
+        for candidate in candidates {
+            do {
+                if let fallback = try await fetchOpenMeteoLocation(query: candidate) {
+                    searchResults = []
+                    let coordinate = CLLocationCoordinate2D(latitude: fallback.latitude, longitude: fallback.longitude)
+                    setTouchdown(coordinate)
+                    let place = [fallback.name, fallback.admin1, fallback.country].compactMap { $0 }.joined(separator: ", ")
+                    statusMessage = t.locationSet("\(place) (\(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)))")
+                    print("[LocationSearch] Open-Meteo fallback '\(candidate)' -> \(place) @ \(coordinate.latitude), \(coordinate.longitude)")
+                    return
+                }
+            } catch {
+                failureReasons.append("OM[\(candidate)]: \(error.localizedDescription)")
+            }
+        }
+
+        searchResults = []
+        if !failureReasons.isEmpty {
+            let condensed = Array(failureReasons.prefix(3)).joined(separator: " | ")
+            statusMessage = t.locationSearchFailed(condensed)
+            print("[LocationSearch] Failed '\(query)'. Candidates: \(candidates). Reasons: \(failureReasons)")
+        } else {
+            statusMessage = t.noLocationResults
+            print("[LocationSearch] No results for '\(query)'")
         }
     }
 
@@ -251,6 +306,91 @@ final class LandingStore: ObservableObject {
         isRestoringSettings = false
     }
 
+    private func parseCoordinateQuery(_ query: String) -> CLLocationCoordinate2D? {
+        let normalized = query.replacingOccurrences(of: "，", with: ",")
+        let parts = normalized
+            .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+            .map(String.init)
+
+        guard parts.count == 2 else { return nil }
+        guard let lat = Double(parts[0]), let lng = Double(parts[1]) else { return nil }
+        guard (-90 ... 90).contains(lat), (-180 ... 180).contains(lng) else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
+    private func selectPreferredMapItem(from mapItems: [MKMapItem], query: String) -> MKMapItem? {
+        guard !mapItems.isEmpty else { return nil }
+        let normalized = query.lowercased()
+        if normalized.contains("thailand") {
+            if let thailand = mapItems.first(where: {
+                $0.placemark.isoCountryCode?.uppercased() == "TH" ||
+                    ($0.placemark.country?.lowercased().contains("thailand") ?? false)
+            }) {
+                return thailand
+            }
+        }
+        return mapItems.first
+    }
+
+    private func searchCandidates(for query: String) -> [String] {
+        var candidates: [String] = []
+        func appendUnique(_ value: String) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            if !candidates.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                candidates.append(trimmed)
+            }
+        }
+
+        appendUnique(query)
+        let stripped = stripDropzoneTerms(from: query)
+        appendUnique(stripped)
+        if !stripped.isEmpty {
+            appendUnique("\(stripped) skydiving")
+        }
+
+        return candidates
+    }
+
+    private func stripDropzoneTerms(from query: String) -> String {
+        let regex = #"\b(drop\s*zone|dropzone|skydiving|dz)\b"#
+        let stripped = query.replacingOccurrences(
+            of: regex,
+            with: " ",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return stripped.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func fetchOpenMeteoLocation(query: String) async throws -> OpenMeteoGeocodingResult? {
+        var components = URLComponents(string: "https://geocoding-api.open-meteo.com/v1/search")!
+        components.queryItems = [
+            URLQueryItem(name: "name", value: query),
+            URLQueryItem(name: "count", value: "10"),
+            URLQueryItem(name: "language", value: language == .zh ? "zh" : "en"),
+            URLQueryItem(name: "format", value: "json"),
+        ]
+        guard let url = components.url else {
+            return nil
+        }
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let decoded = try JSONDecoder().decode(OpenMeteoGeocodingResponse.self, from: data)
+        guard let results = decoded.results, !results.isEmpty else {
+            return nil
+        }
+        let normalized = query.lowercased()
+        if normalized.contains("thailand") {
+            if let thailand = results.first(where: {
+                ($0.country?.lowercased().contains("thailand") ?? false) ||
+                    $0.countryCode?.uppercased() == "TH"
+            }) {
+                return thailand
+            }
+        }
+        return results.first
+    }
+
     private func bearing(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Double {
         let lat1 = from.latitude * .pi / 180
         let lat2 = to.latitude * .pi / 180
@@ -261,6 +401,28 @@ final class LandingStore: ObservableObject {
         let heading = atan2(y, x) * 180 / .pi
         let normalized = heading.truncatingRemainder(dividingBy: 360)
         return normalized >= 0 ? normalized : normalized + 360
+    }
+}
+
+private struct OpenMeteoGeocodingResponse: Decodable {
+    let results: [OpenMeteoGeocodingResult]?
+}
+
+private struct OpenMeteoGeocodingResult: Decodable {
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let country: String?
+    let countryCode: String?
+    let admin1: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case latitude
+        case longitude
+        case country
+        case countryCode = "country_code"
+        case admin1
     }
 }
 

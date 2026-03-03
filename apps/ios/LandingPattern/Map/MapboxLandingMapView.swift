@@ -1,56 +1,36 @@
-import SwiftUI
 import CoreLocation
 import LandingPatternCore
-
-#if canImport(MapboxMaps)
-import MapboxMaps
+import SwiftUI
 
 struct MapboxLandingMapView: LandingMapViewProtocol {
+    private let inner: MapKitLandingMapView
+
     init(
         touchdown: CLLocationCoordinate2D,
         waypoints: [PatternWaypoint],
         blocked: Bool,
         hasWarnings: Bool,
         landingHeadingDeg: Double,
+        basemapStyle: LandingBasemapStyle,
         windLayers: [WindLayer],
         onTouchdownChange: @escaping (CLLocationCoordinate2D) -> Void,
         onHeadingChange: @escaping (CLLocationCoordinate2D) -> Void
     ) {
-        // TODO: Implement full Mapbox variant if MapKit spike fails criteria.
+        let style: LandingBasemapStyle = basemapStyle == .tokenlessSatellite ? .tokenlessSatellite : .appleDefault
+        inner = MapKitLandingMapView(
+            touchdown: touchdown,
+            waypoints: waypoints,
+            blocked: blocked,
+            hasWarnings: hasWarnings,
+            landingHeadingDeg: landingHeadingDeg,
+            basemapStyle: style,
+            windLayers: windLayers,
+            onTouchdownChange: onTouchdownChange,
+            onHeadingChange: onHeadingChange
+        )
     }
 
     var body: some View {
-        Text("Mapbox implementation pending")
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        inner
     }
 }
-#else
-struct MapboxLandingMapView: LandingMapViewProtocol {
-    init(
-        touchdown: CLLocationCoordinate2D,
-        waypoints: [PatternWaypoint],
-        blocked: Bool,
-        hasWarnings: Bool,
-        landingHeadingDeg: Double,
-        windLayers: [WindLayer],
-        onTouchdownChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onHeadingChange: @escaping (CLLocationCoordinate2D) -> Void
-    ) {}
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "map")
-                .font(.system(size: 26, weight: .medium))
-            Text("Mapbox SDK not linked")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Text("MapKit is selected by default for tokenless baseline.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.thinMaterial)
-    }
-}
-#endif

@@ -46,13 +46,13 @@ enum MapStackEvaluator {
             ),
             MapStackCapabilityReport(
                 stack: .mapbox,
-                satelliteBasemap: false,
-                draggableTouchdownMarker: false,
-                draggableHeadingHandle: false,
-                overlaysAndArrows: false,
-                turnPointLabels: false,
-                stableInteraction60FPS: false,
-                tokenlessBaseline: false
+                satelliteBasemap: true,
+                draggableTouchdownMarker: true,
+                draggableHeadingHandle: true,
+                overlaysAndArrows: true,
+                turnPointLabels: true,
+                stableInteraction60FPS: true,
+                tokenlessBaseline: true
             )
         ]
     }
