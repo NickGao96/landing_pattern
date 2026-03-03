@@ -95,7 +95,6 @@ const cases = [
 
 const payload = {
   schemaVersion: 1,
-  generatedAt: new Date().toISOString(),
   tolerance: {
     headingDeg: 1.0,
     distancePct: 0.03,

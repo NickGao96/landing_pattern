@@ -135,6 +135,11 @@ Native iPhone implementation is scaffolded under:
 
 - Xcode 15+ with iOS 17 SDK (full Xcode, not only Command Line Tools).
 - macOS with at least one iOS Simulator runtime installed in Xcode.
+- XcodeGen installed (for `ios:project:generate`):
+
+```bash
+brew install xcodegen
+```
 
 ### Generate iOS project
 
@@ -161,6 +166,12 @@ npm run ios:app:build:sim
 ```
 
 ### Verified local iOS pipeline
+
+```bash
+npm run ios:pipeline
+```
+
+Equivalent expanded steps:
 
 ```bash
 npm run ios:project:generate

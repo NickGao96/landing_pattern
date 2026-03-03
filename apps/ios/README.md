@@ -19,6 +19,7 @@ Native iPhone implementation for the landing pattern simulator, with no backend 
 
 - macOS with Xcode 15+ (full app, iOS 17 SDK).
 - Command-line tools alone are not enough for running `swift test`/`xcodebuild` against iOS-targeted package content.
+- XcodeGen installed (`brew install xcodegen`).
 
 ## Generate project
 
@@ -26,6 +27,14 @@ From repository root:
 
 ```bash
 npm run ios:project:generate
+```
+
+## One-command local pipeline
+
+From repository root:
+
+```bash
+npm run ios:pipeline
 ```
 
 ## Run parity fixtures and Swift tests
