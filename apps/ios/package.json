@@ -1,0 +1,10 @@
+{
+  "name": "@landing/ios",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "project:generate": "xcodegen generate",
+    "core:test": "cd LandingPatternCore && swift test",
+    "app:build:sim": "xcodebuild -project LandingPattern.xcodeproj -scheme LandingPattern -configuration Debug -destination 'generic/platform=iOS Simulator' build"
+  }
+}

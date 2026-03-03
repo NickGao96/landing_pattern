@@ -5,7 +5,7 @@ import { canopyPresets, extrapolateWindProfile, fetchNoaaSurfaceWind } from "@la
 import { computePattern } from "@landing/engine";
 import type { CanopyProfile, PatternInput, SurfaceWind, WindLayer } from "@landing/ui-types";
 import { feetToMeters, knotsToMps, metersToFeet, mpsToKnots } from "./lib/units";
-import { useAppStore } from "./store";
+import { type Language, useAppStore } from "./store";
 import { MapPanel } from "./components/MapPanel";
 
 function numberFromInput(raw: string, fallback: number): number {
@@ -155,8 +155,224 @@ interface LocationSearchResult {
   displayName: string;
 }
 
+const translations = {
+  en: {
+    statusReady: "Ready.",
+    title: "Landing Pattern Simulator",
+    planningNote:
+      "Planning aid only. Not operational guidance. Always follow DZ procedures, traffic, and instructor/coach input.",
+    languageSection: "Language",
+    languageEnglish: "English",
+    languageChinese: "中文",
+    unitsSection: "Units",
+    imperial: "Imperial",
+    metric: "Metric",
+    touchdownSpot: "Touchdown Spot",
+    useBrowserLocation: "Use Browser Location",
+    loadingWind: "Loading Wind...",
+    fetchNoaaWind: "Fetch NOAA Wind",
+    searchPlaceholder: "Search place or address",
+    searching: "Searching...",
+    searchLocation: "Search Location",
+    lat: "Lat",
+    lng: "Lng",
+    applyTouchdown: "Apply Touchdown",
+    spotNamePlaceholder: "Spot name",
+    saveSpot: "Save Spot",
+    selectSavedSpot: "Select saved spot",
+    canopyAndJumper: "Canopy + Jumper",
+    preset: "Preset",
+    canopySizeSqft: "Canopy Size (sqft)",
+    exitWeightLb: "Exit Weight (lb)",
+    airspeedRefAtWlRefKt: "Airspeed Ref @ WL Ref (kt)",
+    wlRef: "WL Ref",
+    glideRatio: "Glide Ratio",
+    wlSpeedExponent: "WL Speed Exponent",
+    airspeedMinKt: "Airspeed Min (kt)",
+    airspeedMaxKt: "Airspeed Max (kt)",
+    currentWlSummary: (wingLoading: number, modeledAirspeedKt: number) =>
+      `Current WL ${wingLoading.toFixed(2)} => Modeled Airspeed ${modeledAirspeedKt.toFixed(1)} kt`,
+    rawModelSummary: (modeledRawAirspeedKt: number, airspeedClampLabel: string | null) =>
+      `Raw model ${modeledRawAirspeedKt.toFixed(1)} kt${airspeedClampLabel ? ` (${airspeedClampLabel})` : ""}`,
+    patternSettings: "Pattern Settings",
+    side: "Side",
+    left: "Left",
+    right: "Right",
+    allowBaseDrift: "Allow Base Drift",
+    landingHeadingDeg: "Landing Heading (deg)",
+    suggestHeadwindFinal: "Suggest Headwind Final",
+    landingDirectionSlider: "Landing Direction Slider",
+    gateLabel: (index: number, altUnitLabel: string) => `Gate ${index + 1} (${altUnitLabel})`,
+    shearExponent: "Shear Exponent",
+    windLayers: "Wind Layers",
+    altLabel: (altUnitLabel: string) => `Alt (${altUnitLabel})`,
+    speedLabel: (speedUnitLabel: string) => `Speed (${speedUnitLabel})`,
+    directionFromDeg: "Direction From (deg)",
+    outputs: "Outputs",
+    wingLoading: "Wing Loading",
+    estAirspeed: "Est. Airspeed",
+    lastSurfaceWind: (
+      speed: string,
+      speedUnitLabel: string,
+      dirFromDeg: string,
+      source: string,
+    ) => `Last Surface Wind: ${speed} ${speedUnitLabel} from ${dirFromDeg} deg (${source})`,
+    speedModel: (airspeedRefKt: string, wlRef: string, exponent: string) =>
+      `Speed Model: ref ${airspeedRefKt}kt @ WL ${wlRef}, exponent ${exponent}`,
+    estSink: (estSinkFps: string) => `Est. Sink: ${estSinkFps} ft/s`,
+    leg: "Leg",
+    heading: "Heading",
+    track: "Track",
+    fwdLabel: (speedUnitLabel: string) => `Fwd (${speedUnitLabel})`,
+    gsLabel: (speedUnitLabel: string) => `GS (${speedUnitLabel})`,
+    timeSeconds: "Time (s)",
+    distLabel: (altUnitLabel: string) => `Dist (${altUnitLabel})`,
+    saferHeadings: "Safer headings (no backward leg):",
+    noForwardHeading: "No fully forward heading found in current winds.",
+    importExport: "Import / Export",
+    exportSnapshotJson: "Export Snapshot JSON",
+    importSnapshotJson: "Import Snapshot JSON",
+    statusLoadedWind: (surfaceWind: SurfaceWind, lat: number, lng: number) =>
+      `Loaded ${surfaceWind.source} wind at touchdown (${lat.toFixed(4)}, ${lng.toFixed(4)}): ${surfaceWind.speedKt.toFixed(1)} kt from ${surfaceWind.dirFromDeg.toFixed(0)} deg.`,
+    statusAutoWindFailed: (errorText: string, includeCoverageHint: boolean) =>
+      `Auto wind failed. Use manual inputs.${includeCoverageHint ? " NOAA API is mostly US-only; this spot may be outside coverage." : ""} ${errorText}`.trim(),
+    statusGeoUnavailable: "Geolocation is not available in this browser.",
+    statusLocationSetFromGeolocation: "Location set from browser geolocation.",
+    statusGeolocationFailed: "Geolocation failed. Enter location manually.",
+    statusLocationSet: (displayName: string) => `Location set to ${displayName}.`,
+    statusEnterSearch: "Enter a place or address to search.",
+    statusNoSearchResults: "No location results found.",
+    statusLocationSearchFailed: (errorText: string) => `Location search failed: ${errorText}`,
+    statusNoWindLayer: "No wind layer available to suggest landing direction.",
+    statusHeadingSuggested: "Landing heading set to headwind suggestion.",
+    statusSnapshotImported: "Snapshot imported.",
+    statusImportFailed: (errorText: string) => `Import failed: ${errorText}`,
+    airspeedCapped: (maxKt: number) => `Airspeed capped by max ${maxKt.toFixed(1)} kt.`,
+    airspeedRaised: (minKt: number) => `Airspeed raised to min ${minKt.toFixed(1)} kt.`,
+    outputBlocked: "Pattern blocked by safety model.",
+    outputCaution: "Pattern computed with caution warnings.",
+    outputValid: "Pattern valid.",
+    segmentNames: {
+      downwind: "Downwind",
+      base: "Base",
+      final: "Final",
+    },
+  },
+  zh: {
+    statusReady: "就绪。",
+    title: "着陆航线模拟器",
+    planningNote: "仅用于规划参考，不构成实际运行指导。请始终遵守 DZ 程序、空中交通和教练指示。",
+    languageSection: "语言",
+    languageEnglish: "English",
+    languageChinese: "中文",
+    unitsSection: "单位",
+    imperial: "英制",
+    metric: "公制",
+    touchdownSpot: "着陆点",
+    useBrowserLocation: "使用浏览器定位",
+    loadingWind: "正在加载风数据...",
+    fetchNoaaWind: "获取 NOAA 风数据",
+    searchPlaceholder: "搜索地点或地址",
+    searching: "搜索中...",
+    searchLocation: "搜索位置",
+    lat: "纬度",
+    lng: "经度",
+    applyTouchdown: "应用着陆点",
+    spotNamePlaceholder: "点位名称",
+    saveSpot: "保存点位",
+    selectSavedSpot: "选择已保存点位",
+    canopyAndJumper: "伞翼与跳伞员",
+    preset: "预设",
+    canopySizeSqft: "伞翼面积 (sqft)",
+    exitWeightLb: "出舱重量 (lb)",
+    airspeedRefAtWlRefKt: "参考翼载下参考空速 (kt)",
+    wlRef: "参考翼载",
+    glideRatio: "滑翔比",
+    wlSpeedExponent: "翼载速度指数",
+    airspeedMinKt: "最小空速 (kt)",
+    airspeedMaxKt: "最大空速 (kt)",
+    currentWlSummary: (wingLoading: number, modeledAirspeedKt: number) =>
+      `当前翼载 ${wingLoading.toFixed(2)} => 模型空速 ${modeledAirspeedKt.toFixed(1)} kt`,
+    rawModelSummary: (modeledRawAirspeedKt: number, airspeedClampLabel: string | null) =>
+      `原始模型 ${modeledRawAirspeedKt.toFixed(1)} kt${airspeedClampLabel ? `（${airspeedClampLabel}）` : ""}`,
+    patternSettings: "航线设置",
+    side: "方向",
+    left: "左",
+    right: "右",
+    allowBaseDrift: "允许第二边随风漂移",
+    landingHeadingDeg: "着陆航向 (度)",
+    suggestHeadwindFinal: "一键设为迎风着陆航向",
+    landingDirectionSlider: "着陆方向滑块",
+    gateLabel: (index: number, altUnitLabel: string) =>
+      `${(["第一边", "第二边", "第三边", "接地点"][index] ?? `阶段${index + 1}`)}高度 (${altUnitLabel})`,
+    shearExponent: "风切变指数",
+    windLayers: "分层风",
+    altLabel: (altUnitLabel: string) => `高度 (${altUnitLabel})`,
+    speedLabel: (speedUnitLabel: string) => `速度 (${speedUnitLabel})`,
+    directionFromDeg: "来向 (度)",
+    outputs: "输出",
+    wingLoading: "翼载",
+    estAirspeed: "估算空速",
+    lastSurfaceWind: (
+      speed: string,
+      speedUnitLabel: string,
+      dirFromDeg: string,
+      source: string,
+    ) => `最近地表风: ${speed} ${speedUnitLabel}，来自 ${dirFromDeg} 度（${source}）`,
+    speedModel: (airspeedRefKt: string, wlRef: string, exponent: string) =>
+      `速度模型: 参考 ${airspeedRefKt}kt @ 翼载 ${wlRef}，指数 ${exponent}`,
+    estSink: (estSinkFps: string) => `估算下沉率: ${estSinkFps} ft/s`,
+    leg: "航段",
+    heading: "航向",
+    track: "航迹",
+    fwdLabel: (speedUnitLabel: string) => `前向 (${speedUnitLabel})`,
+    gsLabel: (speedUnitLabel: string) => `地速 (${speedUnitLabel})`,
+    timeSeconds: "时间 (s)",
+    distLabel: (altUnitLabel: string) => `距离 (${altUnitLabel})`,
+    saferHeadings: "更安全航向（无倒飞航段）：",
+    noForwardHeading: "当前风况下未找到全程前向航向。",
+    importExport: "导入 / 导出",
+    exportSnapshotJson: "导出快照 JSON",
+    importSnapshotJson: "导入快照 JSON",
+    statusLoadedWind: (surfaceWind: SurfaceWind, lat: number, lng: number) =>
+      `已加载 ${surfaceWind.source} 风数据（着陆点 ${lat.toFixed(4)}, ${lng.toFixed(4)}）：${surfaceWind.speedKt.toFixed(1)} kt，来向 ${surfaceWind.dirFromDeg.toFixed(0)} 度。`,
+    statusAutoWindFailed: (errorText: string, includeCoverageHint: boolean) =>
+      `自动获取风数据失败，请手动输入。${includeCoverageHint ? " NOAA API 主要覆盖美国，此地点可能超出范围。" : ""} ${errorText}`.trim(),
+    statusGeoUnavailable: "当前浏览器不支持定位。",
+    statusLocationSetFromGeolocation: "已使用浏览器定位设置位置。",
+    statusGeolocationFailed: "定位失败，请手动输入位置。",
+    statusLocationSet: (displayName: string) => `已将位置设为 ${displayName}。`,
+    statusEnterSearch: "请输入地点或地址进行搜索。",
+    statusNoSearchResults: "未找到位置结果。",
+    statusLocationSearchFailed: (errorText: string) => `位置搜索失败：${errorText}`,
+    statusNoWindLayer: "当前没有可用于计算迎风航向的风层。",
+    statusHeadingSuggested: "已将着陆航向设置为迎风方向。",
+    statusSnapshotImported: "快照已导入。",
+    statusImportFailed: (errorText: string) => `导入失败：${errorText}`,
+    airspeedCapped: (maxKt: number) => `空速被最大值 ${maxKt.toFixed(1)} kt 限制。`,
+    airspeedRaised: (minKt: number) => `空速已提升到最小值 ${minKt.toFixed(1)} kt。`,
+    outputBlocked: "航线被安全模型拦截。",
+    outputCaution: "航线已计算，但包含警告。",
+    outputValid: "航线有效。",
+    segmentNames: {
+      downwind: "第一边",
+      base: "第二边",
+      final: "第三边",
+    },
+  },
+} as const;
+
+function formatSegmentName(language: Language, name: string): string {
+  const normalized = name.trim().toLowerCase();
+  const translated =
+    translations[language].segmentNames[normalized as keyof (typeof translations)[Language]["segmentNames"]];
+  return translated ?? name;
+}
+
 export default function App() {
   const {
+    language,
+    setLanguage,
     unitSystem,
     setUnitSystem,
     location,
@@ -184,6 +400,7 @@ export default function App() {
     saveNamedSpot,
     selectNamedSpot,
   } = useAppStore();
+  const t = translations[language];
 
   const [touchdownLatInput, setTouchdownLatInput] = useState(touchdown.lat.toFixed(5));
   const [touchdownLngInput, setTouchdownLngInput] = useState(touchdown.lng.toFixed(5));
@@ -192,8 +409,14 @@ export default function App() {
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [lastSurfaceWind, setLastSurfaceWind] = useState<SurfaceWind | null>(null);
   const [spotName, setSpotName] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Ready.");
+  const [statusMessage, setStatusMessage] = useState<string>(translations.en.statusReady);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setStatusMessage((current) =>
+      current === translations.en.statusReady || current === translations.zh.statusReady ? t.statusReady : current,
+    );
+  }, [t.statusReady]);
 
   const patternInput = useMemo(
     () =>
@@ -235,27 +458,22 @@ export default function App() {
   const windMutation = useMutation({
     mutationFn: async () => fetchNoaaSurfaceWind(touchdown.lat, touchdown.lng),
     onSuccess: (surfaceWind) => {
-      const profile = extrapolateWindProfile(surfaceWind, [900, 600, 300], shearAlpha);
+      const profile = extrapolateWindProfile(surfaceWind, gatesFt.slice(0, 3), shearAlpha);
       setWindLayers(profile);
       setLastSurfaceWind(surfaceWind);
-      setStatusMessage(
-        `Loaded ${surfaceWind.source} wind at touchdown (${touchdown.lat.toFixed(4)}, ${touchdown.lng.toFixed(4)}): ${surfaceWind.speedKt.toFixed(1)} kt from ${surfaceWind.dirFromDeg.toFixed(0)} deg.`,
-      );
+      setStatusMessage(t.statusLoadedWind(surfaceWind, touchdown.lat, touchdown.lng));
     },
     onError: (error) => {
       setLastSurfaceWind(null);
       const errorText = String(error);
-      const coverageHint =
-        errorText.includes("/points/") && errorText.includes("404")
-          ? " NOAA API is mostly US-only; this spot may be outside coverage."
-          : "";
-      setStatusMessage(`Auto wind failed. Use manual inputs.${coverageHint} ${errorText}`);
+      const includeCoverageHint = errorText.includes("/points/") && errorText.includes("404");
+      setStatusMessage(t.statusAutoWindFailed(errorText, includeCoverageHint));
     },
   });
 
   function handleUseGeolocation(): void {
     if (!("geolocation" in navigator)) {
-      setStatusMessage("Geolocation is not available in this browser.");
+      setStatusMessage(t.statusGeoUnavailable);
       return;
     }
 
@@ -267,10 +485,10 @@ export default function App() {
         setTouchdown(lat, lng);
         setTouchdownLatInput(lat.toFixed(5));
         setTouchdownLngInput(lng.toFixed(5));
-        setStatusMessage("Location set from browser geolocation.");
+        setStatusMessage(t.statusLocationSetFromGeolocation);
       },
       () => {
-        setStatusMessage("Geolocation failed. Enter location manually.");
+        setStatusMessage(t.statusGeolocationFailed);
       },
       {
         timeout: 5000,
@@ -293,13 +511,13 @@ export default function App() {
 
   function applySearchedLocation(result: LocationSearchResult): void {
     handleTouchdownChange(result.lat, result.lng);
-    setStatusMessage(`Location set to ${result.displayName}.`);
+    setStatusMessage(t.statusLocationSet(result.displayName));
   }
 
   async function handleSearchLocation(): Promise<void> {
     const query = locationQuery.trim();
     if (!query) {
-      setStatusMessage("Enter a place or address to search.");
+      setStatusMessage(t.statusEnterSearch);
       return;
     }
 
@@ -331,7 +549,7 @@ export default function App() {
 
       setLocationSearchResults(results);
       if (results.length === 0) {
-        setStatusMessage("No location results found.");
+        setStatusMessage(t.statusNoSearchResults);
         return;
       }
 
@@ -340,20 +558,20 @@ export default function App() {
         applySearchedLocation(firstResult);
       }
     } catch (error) {
-      setStatusMessage(`Location search failed: ${String(error)}`);
+      setStatusMessage(t.statusLocationSearchFailed(String(error)));
     } finally {
       setIsSearchingLocation(false);
     }
   }
 
   function handleSetSuggestedHeading(): void {
-    const lowLayer = windLayers.find((layer) => layer.altitudeFt === 300) ?? windLayers[windLayers.length - 1];
+    const lowLayer = [...windLayers].sort((a, b) => a.altitudeFt - b.altitudeFt)[0];
     if (!lowLayer) {
-      setStatusMessage("No wind layer available to suggest landing direction.");
+      setStatusMessage(t.statusNoWindLayer);
       return;
     }
     setHeading(lowLayer.dirFromDeg);
-    setStatusMessage("Landing heading set to headwind suggestion.");
+    setStatusMessage(t.statusHeadingSuggested);
   }
 
   function handlePresetChange(model: string): void {
@@ -378,6 +596,7 @@ export default function App() {
       windLayers,
       namedSpots,
       unitSystem,
+      language,
     });
   }
 
@@ -404,6 +623,7 @@ export default function App() {
         canopy: CanopyProfile;
         exitWeightLb: number;
         windLayers: WindLayer[];
+        language: Language;
       }>;
 
       if (payload.location) {
@@ -440,10 +660,13 @@ export default function App() {
       if (payload.windLayers && payload.windLayers.length > 0) {
         setWindLayers(payload.windLayers);
       }
+      if (payload.language === "en" || payload.language === "zh") {
+        setLanguage(payload.language);
+      }
 
-      setStatusMessage("Snapshot imported.");
+      setStatusMessage(t.statusSnapshotImported);
     } catch (error) {
-      setStatusMessage(`Import failed: ${String(error)}`);
+      setStatusMessage(t.statusImportFailed(String(error)));
     }
   }
 
@@ -460,30 +683,29 @@ export default function App() {
   const clampTolerance = 0.05;
   const airspeedClampLabel =
     modeledRawAirspeedKt > airspeedMaxKt + clampTolerance
-      ? `Airspeed capped by max ${airspeedMaxKt.toFixed(1)} kt.`
+      ? t.airspeedCapped(airspeedMaxKt)
       : modeledRawAirspeedKt < airspeedMinKt - clampTolerance
-        ? `Airspeed raised to min ${airspeedMinKt.toFixed(1)} kt.`
+        ? t.airspeedRaised(airspeedMinKt)
         : null;
   const hasCautionWarnings = patternOutput.warnings.length > 0;
   const outputStatusClass = patternOutput.blocked ? "blocked" : hasCautionWarnings ? "caution" : "ok";
   const outputStatusText = patternOutput.blocked
-    ? "Pattern blocked by safety model."
+    ? t.outputBlocked
     : hasCautionWarnings
-      ? "Pattern computed with caution warnings."
-      : "Pattern valid.";
+      ? t.outputCaution
+      : t.outputValid;
 
   return (
     <div className="app-shell">
       <header className="banner">
-        <h1>Landing Pattern Simulator</h1>
-        <p>
-          Planning aid only. Not operational guidance. Always follow DZ procedures, traffic, and instructor/coach input.
-        </p>
+        <h1>{t.title}</h1>
+        <p>{t.planningNote}</p>
       </header>
 
       <main className="layout">
         <section className="map-column">
           <MapPanel
+            language={language}
             touchdown={touchdown}
             waypoints={patternOutput.waypoints}
             blocked={patternOutput.blocked}
@@ -497,7 +719,21 @@ export default function App() {
 
         <aside className="sidebar">
           <section>
-            <h2>Units</h2>
+            <h2>{t.languageSection}</h2>
+            <div className="row">
+              <label>
+                <input type="radio" checked={language === "en"} onChange={() => setLanguage("en")} />
+                {t.languageEnglish}
+              </label>
+              <label>
+                <input type="radio" checked={language === "zh"} onChange={() => setLanguage("zh")} />
+                {t.languageChinese}
+              </label>
+            </div>
+          </section>
+
+          <section>
+            <h2>{t.unitsSection}</h2>
             <div className="row">
               <label>
                 <input
@@ -505,31 +741,31 @@ export default function App() {
                   checked={unitSystem === "imperial"}
                   onChange={() => setUnitSystem("imperial")}
                 />
-                Imperial
+                {t.imperial}
               </label>
               <label>
                 <input type="radio" checked={unitSystem === "metric"} onChange={() => setUnitSystem("metric")} />
-                Metric
+                {t.metric}
               </label>
             </div>
           </section>
 
           <section>
-            <h2>Touchdown Spot</h2>
+            <h2>{t.touchdownSpot}</h2>
             <div className="row wrap">
-              <button onClick={handleUseGeolocation}>Use Browser Location</button>
+              <button onClick={handleUseGeolocation}>{t.useBrowserLocation}</button>
               <button onClick={() => windMutation.mutate()} disabled={windMutation.isPending}>
-                {windMutation.isPending ? "Loading Wind..." : "Fetch NOAA Wind"}
+                {windMutation.isPending ? t.loadingWind : t.fetchNoaaWind}
               </button>
             </div>
             <div className="location-search">
               <input
-                placeholder="Search place or address"
+                placeholder={t.searchPlaceholder}
                 value={locationQuery}
                 onChange={(event) => setLocationQuery(event.target.value)}
               />
               <button onClick={() => void handleSearchLocation()} disabled={isSearchingLocation}>
-                {isSearchingLocation ? "Searching..." : "Search Location"}
+                {isSearchingLocation ? t.searching : t.searchLocation}
               </button>
             </div>
             {locationSearchResults.length > 1 ? (
@@ -543,18 +779,22 @@ export default function App() {
             ) : null}
             <div className="grid two">
               <label>
-                Lat
+                {t.lat}
                 <input value={touchdownLatInput} onChange={(event) => setTouchdownLatInput(event.target.value)} />
               </label>
               <label>
-                Lng
+                {t.lng}
                 <input value={touchdownLngInput} onChange={(event) => setTouchdownLngInput(event.target.value)} />
               </label>
             </div>
-            <button onClick={handleTouchdownInputApply}>Apply Touchdown</button>
+            <button onClick={handleTouchdownInputApply}>{t.applyTouchdown}</button>
             <p className="status">{statusMessage}</p>
             <div className="grid two">
-              <input placeholder="Spot name" value={spotName} onChange={(event) => setSpotName(event.target.value)} />
+              <input
+                placeholder={t.spotNamePlaceholder}
+                value={spotName}
+                onChange={(event) => setSpotName(event.target.value)}
+              />
               <button
                 onClick={() => {
                   if (!spotName.trim()) {
@@ -564,13 +804,13 @@ export default function App() {
                   setSpotName("");
                 }}
               >
-                Save Spot
+                {t.saveSpot}
               </button>
             </div>
             {namedSpots.length > 0 ? (
               <select onChange={(event) => selectNamedSpot(event.target.value)} defaultValue="">
                 <option value="" disabled>
-                  Select saved spot
+                  {t.selectSavedSpot}
                 </option>
                 {namedSpots.map((spot) => (
                   <option key={spot.id} value={spot.id}>
@@ -582,9 +822,9 @@ export default function App() {
           </section>
 
           <section>
-            <h2>Canopy + Jumper</h2>
+            <h2>{t.canopyAndJumper}</h2>
             <label>
-              Preset
+              {t.preset}
               <select value={canopy.model} onChange={(event) => handlePresetChange(event.target.value)}>
                 {canopyPresets.map((preset) => (
                   <option key={preset.model} value={preset.model}>
@@ -595,25 +835,25 @@ export default function App() {
             </label>
             <div className="grid two">
               <label>
-                Canopy Size (sqft)
+                {t.canopySizeSqft}
                 <NumberInput
                   value={canopy.sizeSqft}
                   onValueChange={(nextValue) => setCanopy({ ...canopy, sizeSqft: nextValue })}
                 />
               </label>
               <label>
-                Exit Weight (lb)
+                {t.exitWeightLb}
                 <NumberInput value={exitWeightLb} onValueChange={(nextValue) => setExitWeight(nextValue)} />
               </label>
               <label>
-                Airspeed Ref @ WL Ref (kt)
+                {t.airspeedRefAtWlRefKt}
                 <NumberInput
                   value={canopy.airspeedRefKt}
                   onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedRefKt: nextValue })}
                 />
               </label>
               <label>
-                WL Ref
+                {t.wlRef}
                 <NumberInput
                   step="0.05"
                   value={canopy.wlRef}
@@ -621,7 +861,7 @@ export default function App() {
                 />
               </label>
               <label>
-                Glide Ratio
+                {t.glideRatio}
                 <NumberInput
                   step="0.1"
                   value={canopy.glideRatio}
@@ -629,7 +869,7 @@ export default function App() {
                 />
               </label>
               <label>
-                WL Speed Exponent
+                {t.wlSpeedExponent}
                 <NumberInput
                   step="0.05"
                   value={canopy.airspeedWlExponent ?? 0.5}
@@ -637,7 +877,7 @@ export default function App() {
                 />
               </label>
               <label>
-                Airspeed Min (kt)
+                {t.airspeedMinKt}
                 <NumberInput
                   step="0.5"
                   value={airspeedMinKt}
@@ -645,7 +885,7 @@ export default function App() {
                 />
               </label>
               <label>
-                Airspeed Max (kt)
+                {t.airspeedMaxKt}
                 <NumberInput
                   step="0.5"
                   value={airspeedMaxKt}
@@ -654,7 +894,7 @@ export default function App() {
               </label>
             </div>
             <p className="status">
-              Current WL {patternOutput.metrics.wingLoading.toFixed(2)} =&gt; Modeled Airspeed {patternOutput.metrics.estAirspeedKt.toFixed(1)} kt
+              {t.currentWlSummary(patternOutput.metrics.wingLoading, patternOutput.metrics.estAirspeedKt)}
             </p>
             <div className="airspeed-meter">
               <div className="airspeed-meter-track">
@@ -665,20 +905,18 @@ export default function App() {
                 <span>{modeledAirspeedKt.toFixed(1)} kt</span>
                 <span>{airspeedMaxKt.toFixed(1)} kt</span>
               </div>
-              <p className="status">
-                Raw model {modeledRawAirspeedKt.toFixed(1)} kt {airspeedClampLabel ? `(${airspeedClampLabel})` : ""}
-              </p>
+              <p className="status">{t.rawModelSummary(modeledRawAirspeedKt, airspeedClampLabel)}</p>
             </div>
           </section>
 
           <section>
-            <h2>Pattern Settings</h2>
+            <h2>{t.patternSettings}</h2>
             <div className="row">
               <label>
-                Side
+                {t.side}
                 <select value={side} onChange={(event) => setSide(event.target.value as "left" | "right")}>
-                  <option value="left">Left</option>
-                  <option value="right">Right</option>
+                  <option value="left">{t.left}</option>
+                  <option value="right">{t.right}</option>
                 </select>
               </label>
               <label>
@@ -687,16 +925,16 @@ export default function App() {
                   checked={baseLegDrift}
                   onChange={(event) => setBaseLegDrift(event.target.checked)}
                 />
-                Allow Base Drift
+                {t.allowBaseDrift}
               </label>
               <label>
-                Landing Heading (deg)
+                {t.landingHeadingDeg}
                 <NumberInput value={landingHeadingDeg} onValueChange={(nextValue) => setHeading(nextValue)} />
               </label>
-              <button onClick={handleSetSuggestedHeading}>Suggest Headwind Final</button>
+              <button onClick={handleSetSuggestedHeading}>{t.suggestHeadwindFinal}</button>
             </div>
             <label>
-              Landing Direction Slider
+              {t.landingDirectionSlider}
               <input
                 type="range"
                 min={0}
@@ -708,7 +946,7 @@ export default function App() {
             <div className="grid two">
               {gatesFt.map((gate, index) => (
                 <label key={index}>
-                  Gate {index + 1} ({altUnitLabel})
+                  {t.gateLabel(index, altUnitLabel)}
                   <NumberInput
                     value={Math.round(toDisplayFeet(unitSystem, gate))}
                     onValueChange={(nextValue) => {
@@ -720,18 +958,18 @@ export default function App() {
                 </label>
               ))}
               <label>
-                Shear Exponent
+                {t.shearExponent}
                 <NumberInput step="0.01" value={shearAlpha} onValueChange={(nextValue) => setShearAlpha(nextValue)} />
               </label>
             </div>
           </section>
 
           <section>
-            <h2>Wind Layers</h2>
+            <h2>{t.windLayers}</h2>
             {windLayers.map((layer, layerIndex) => (
               <div className="grid three" key={`${layerIndex}-${layer.altitudeFt}`}>
                 <label>
-                  Alt ({altUnitLabel})
+                  {t.altLabel(altUnitLabel)}
                   <NumberInput
                     value={Math.round(toDisplayFeet(unitSystem, layer.altitudeFt))}
                     onValueChange={(nextValue) => {
@@ -741,7 +979,7 @@ export default function App() {
                   />
                 </label>
                 <label>
-                  Speed ({speedUnitLabel})
+                  {t.speedLabel(speedUnitLabel)}
                   <NumberInput
                     value={Number(toDisplayKnots(unitSystem, layer.speedKt).toFixed(1))}
                     onValueChange={(nextValue) => {
@@ -751,7 +989,7 @@ export default function App() {
                   />
                 </label>
                 <label>
-                  Direction From (deg)
+                  {t.directionFromDeg}
                   <NumberInput
                     value={Math.round(layer.dirFromDeg)}
                     onValueChange={(nextValue) =>
@@ -764,21 +1002,31 @@ export default function App() {
           </section>
 
           <section>
-            <h2>Outputs</h2>
-            <p>Wing Loading: {patternOutput.metrics.wingLoading.toFixed(2)}</p>
+            <h2>{t.outputs}</h2>
             <p>
-              Est. Airspeed: {toDisplayKnots(unitSystem, patternOutput.metrics.estAirspeedKt).toFixed(1)} {speedUnitLabel}
+              {t.wingLoading}: {patternOutput.metrics.wingLoading.toFixed(2)}
+            </p>
+            <p>
+              {t.estAirspeed}: {toDisplayKnots(unitSystem, patternOutput.metrics.estAirspeedKt).toFixed(1)} {speedUnitLabel}
             </p>
             {lastSurfaceWind ? (
               <p>
-                Last Surface Wind: {toDisplayKnots(unitSystem, lastSurfaceWind.speedKt).toFixed(1)} {speedUnitLabel} from{" "}
-                {lastSurfaceWind.dirFromDeg.toFixed(0)} deg ({lastSurfaceWind.source})
+                {t.lastSurfaceWind(
+                  toDisplayKnots(unitSystem, lastSurfaceWind.speedKt).toFixed(1),
+                  speedUnitLabel,
+                  lastSurfaceWind.dirFromDeg.toFixed(0),
+                  lastSurfaceWind.source,
+                )}
               </p>
             ) : null}
             <p>
-              Speed Model: ref {canopy.airspeedRefKt.toFixed(1)}kt @ WL {canopy.wlRef.toFixed(2)}, exponent {(canopy.airspeedWlExponent ?? 0.5).toFixed(2)}
+              {t.speedModel(
+                canopy.airspeedRefKt.toFixed(1),
+                canopy.wlRef.toFixed(2),
+                (canopy.airspeedWlExponent ?? 0.5).toFixed(2),
+              )}
             </p>
-            <p>Est. Sink: {patternOutput.metrics.estSinkFps.toFixed(2)} ft/s</p>
+            <p>{t.estSink(patternOutput.metrics.estSinkFps.toFixed(2))}</p>
             <p className={outputStatusClass}>{outputStatusText}</p>
             {patternOutput.warnings.length > 0 ? (
               <ul>
@@ -791,19 +1039,19 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Leg</th>
-                    <th>Heading</th>
-                    <th>Track</th>
-                    <th>Fwd ({speedUnitLabel})</th>
-                    <th>GS ({speedUnitLabel})</th>
-                    <th>Time (s)</th>
-                    <th>Dist ({altUnitLabel})</th>
+                    <th>{t.leg}</th>
+                    <th>{t.heading}</th>
+                    <th>{t.track}</th>
+                    <th>{t.fwdLabel(speedUnitLabel)}</th>
+                    <th>{t.gsLabel(speedUnitLabel)}</th>
+                    <th>{t.timeSeconds}</th>
+                    <th>{t.distLabel(altUnitLabel)}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {patternOutput.segments.map((segment) => (
                     <tr key={segment.name}>
-                      <td>{segment.name}</td>
+                      <td>{formatSegmentName(language, segment.name)}</td>
                       <td>{segment.headingDeg.toFixed(0)}</td>
                       <td>{segment.trackHeadingDeg.toFixed(0)}</td>
                       <td>{toDisplayKnots(unitSystem, segment.alongLegSpeedKt).toFixed(1)}</td>
@@ -817,7 +1065,7 @@ export default function App() {
             ) : null}
             {safeLandingHeadings.length > 0 ? (
               <div>
-                <p>Safer headings (no backward leg):</p>
+                <p>{t.saferHeadings}</p>
                 <div className="row wrap">
                   {safeLandingHeadings.map((heading) => (
                     <button key={heading} onClick={() => setHeading(heading)}>
@@ -827,15 +1075,15 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <p>No fully forward heading found in current winds.</p>
+              <p>{t.noForwardHeading}</p>
             )}
           </section>
 
           <section>
-            <h2>Import / Export</h2>
+            <h2>{t.importExport}</h2>
             <div className="row wrap">
-              <button onClick={handleExport}>Export Snapshot JSON</button>
-              <button onClick={handleImportClick}>Import Snapshot JSON</button>
+              <button onClick={handleExport}>{t.exportSnapshotJson}</button>
+              <button onClick={handleImportClick}>{t.importSnapshotJson}</button>
             </div>
             <input ref={importInputRef} type="file" accept="application/json" hidden onChange={handleImportFile} />
           </section>

@@ -45,6 +45,10 @@ interface SegmentSolveResult {
   blockedReason?: string;
 }
 
+function isFiniteNumber(value: number): boolean {
+  return Number.isFinite(value);
+}
+
 function computeWingLoading(exitWeightLb: number, canopyAreaSqft: number): number {
   return exitWeightLb / canopyAreaSqft;
 }
@@ -194,16 +198,42 @@ export function validatePatternInput(input: PatternInput): ValidationResult {
     errors.push("Touchdown location must be valid latitude/longitude values.");
   }
 
-  if (input.jumper.exitWeightLb <= 0 || input.jumper.canopyAreaSqft <= 0) {
-    errors.push("Exit weight and canopy area must be positive.");
+  if (!isFiniteNumber(input.landingHeadingDeg)) {
+    errors.push("Landing heading must be a finite degree value.");
   }
 
-  if (input.canopy.wlRef <= 0 || input.canopy.airspeedRefKt <= 0 || input.canopy.glideRatio <= 0) {
-    errors.push("Canopy reference values must be positive.");
+  if (
+    !isFiniteNumber(input.jumper.exitWeightLb) ||
+    !isFiniteNumber(input.jumper.canopyAreaSqft) ||
+    input.jumper.exitWeightLb <= 0 ||
+    input.jumper.canopyAreaSqft <= 0
+  ) {
+    errors.push("Exit weight and canopy area must be finite and positive.");
+  }
+
+  if (
+    !isFiniteNumber(input.canopy.wlRef) ||
+    !isFiniteNumber(input.canopy.airspeedRefKt) ||
+    !isFiniteNumber(input.canopy.glideRatio) ||
+    input.canopy.wlRef <= 0 ||
+    input.canopy.airspeedRefKt <= 0 ||
+    input.canopy.glideRatio <= 0
+  ) {
+    errors.push("Canopy reference values must be finite and positive.");
+  }
+
+  if (
+    (input.canopy.airspeedWlExponent !== undefined && !isFiniteNumber(input.canopy.airspeedWlExponent)) ||
+    (input.canopy.airspeedMinKt !== undefined && !isFiniteNumber(input.canopy.airspeedMinKt)) ||
+    (input.canopy.airspeedMaxKt !== undefined && !isFiniteNumber(input.canopy.airspeedMaxKt))
+  ) {
+    errors.push("Canopy tuning values must be finite when provided.");
   }
 
   const [downwindGate, baseGate, finalGate, touchdownGate] = input.gatesFt;
-  if (!(downwindGate > baseGate && baseGate > finalGate && finalGate > touchdownGate)) {
+  if (input.gatesFt.some((gate) => !isFiniteNumber(gate))) {
+    errors.push("Gate altitudes must be finite numeric values.");
+  } else if (!(downwindGate > baseGate && baseGate > finalGate && finalGate > touchdownGate)) {
     errors.push("Gate altitudes must be strictly descending, for example 900 > 600 > 300 > 0.");
   }
 
@@ -211,7 +241,11 @@ export function validatePatternInput(input: PatternInput): ValidationResult {
     warnings.push("Touchdown gate is expected to be 0 ft AGL in this model.");
   }
 
-  for (const wind of input.winds) {
+  for (const [index, wind] of input.winds.entries()) {
+    if (!isFiniteNumber(wind.altitudeFt) || !isFiniteNumber(wind.speedKt) || !isFiniteNumber(wind.dirFromDeg)) {
+      errors.push(`Wind layer values must be finite (index ${index}).`);
+      continue;
+    }
     if (wind.speedKt < 0) {
       errors.push(`Wind speed cannot be negative at ${wind.altitudeFt} ft.`);
     }

@@ -1,0 +1,690 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-03-03T12:09:37.456Z",
+  "tolerance": {
+    "headingDeg": 1,
+    "distancePct": 0.03,
+    "timePct": 0.03,
+    "speedKt": 0.5
+  },
+  "cases": [
+    {
+      "name": "nominal_left_drift",
+      "input": {
+        "touchdownLat": 37,
+        "touchdownLng": -122,
+        "landingHeadingDeg": 180,
+        "side": "left",
+        "baseLegDrift": true,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 170,
+          "canopyAreaSqft": 170
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "downwind_start",
+            "lat": 37,
+            "lng": -122.0034829322909,
+            "altFt": 900
+          },
+          {
+            "name": "base_start",
+            "lat": 37.00215461298793,
+            "lng": -122.0034829322909,
+            "altFt": 600
+          },
+          {
+            "name": "final_start",
+            "lat": 37.00215461298793,
+            "lng": -122,
+            "altFt": 300
+          },
+          {
+            "name": "touchdown",
+            "lat": 37,
+            "lng": -122,
+            "altFt": 0
+          }
+        ],
+        "segments": [
+          {
+            "name": "downwind",
+            "headingDeg": 345.5224878140701,
+            "trackHeadingDeg": 0,
+            "alongLegSpeedKt": 19.364916731037084,
+            "groundSpeedKt": 19.364916731037084,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 784.2791276070019
+          },
+          {
+            "name": "base",
+            "headingDeg": 90,
+            "trackHeadingDeg": 90,
+            "alongLegSpeedKt": 25,
+            "groundSpeedKt": 25,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1012.5
+          },
+          {
+            "name": "final",
+            "headingDeg": 194.4775121859299,
+            "trackHeadingDeg": 180,
+            "alongLegSpeedKt": 19.364916731037084,
+            "groundSpeedKt": 19.364916731037084,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 784.2791276070019
+          }
+        ],
+        "metrics": {
+          "wingLoading": 1,
+          "estAirspeedKt": 20,
+          "estSinkFps": 12.50230452674897
+        },
+        "warnings": [],
+        "blocked": false
+      }
+    },
+    {
+      "name": "nominal_right_drift",
+      "input": {
+        "touchdownLat": 37,
+        "touchdownLng": -122,
+        "landingHeadingDeg": 180,
+        "side": "right",
+        "baseLegDrift": true,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 170,
+          "canopyAreaSqft": 170
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "downwind_start",
+            "lat": 37,
+            "lng": -121.99791024062547,
+            "altFt": 900
+          },
+          {
+            "name": "base_start",
+            "lat": 37.00215461298793,
+            "lng": -121.99791024062547,
+            "altFt": 600
+          },
+          {
+            "name": "final_start",
+            "lat": 37.00215461298793,
+            "lng": -122,
+            "altFt": 300
+          },
+          {
+            "name": "touchdown",
+            "lat": 37,
+            "lng": -122,
+            "altFt": 0
+          }
+        ],
+        "segments": [
+          {
+            "name": "downwind",
+            "headingDeg": 345.5224878140701,
+            "trackHeadingDeg": 0,
+            "alongLegSpeedKt": 19.364916731037084,
+            "groundSpeedKt": 19.364916731037084,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 784.2791276070019
+          },
+          {
+            "name": "base",
+            "headingDeg": 270,
+            "trackHeadingDeg": 270,
+            "alongLegSpeedKt": 15,
+            "groundSpeedKt": 15,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 607.5000000000001
+          },
+          {
+            "name": "final",
+            "headingDeg": 194.4775121859299,
+            "trackHeadingDeg": 180,
+            "alongLegSpeedKt": 19.364916731037084,
+            "groundSpeedKt": 19.364916731037084,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 784.2791276070019
+          }
+        ],
+        "metrics": {
+          "wingLoading": 1,
+          "estAirspeedKt": 20,
+          "estSinkFps": 12.50230452674897
+        },
+        "warnings": [],
+        "blocked": false
+      }
+    },
+    {
+      "name": "no_drift_crosswind",
+      "input": {
+        "touchdownLat": 37,
+        "touchdownLng": -122,
+        "landingHeadingDeg": 180,
+        "side": "left",
+        "baseLegDrift": false,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 170,
+          "canopyAreaSqft": 170
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 5,
+            "dirFromDeg": 180,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 5,
+            "dirFromDeg": 180,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 5,
+            "dirFromDeg": 180,
+            "source": "auto"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "downwind_start",
+            "lat": 36.99888736263736,
+            "lng": -122.00269786775172,
+            "altFt": 900
+          },
+          {
+            "name": "base_start",
+            "lat": 37.00166895604396,
+            "lng": -122.00269786775172,
+            "altFt": 600
+          },
+          {
+            "name": "final_start",
+            "lat": 37.00166895604396,
+            "lng": -122,
+            "altFt": 300
+          },
+          {
+            "name": "touchdown",
+            "lat": 37,
+            "lng": -122,
+            "altFt": 0
+          }
+        ],
+        "segments": [
+          {
+            "name": "downwind",
+            "headingDeg": 0,
+            "trackHeadingDeg": 0,
+            "alongLegSpeedKt": 25,
+            "groundSpeedKt": 25,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1012.5
+          },
+          {
+            "name": "base",
+            "headingDeg": 104.47751218592992,
+            "trackHeadingDeg": 90,
+            "alongLegSpeedKt": 19.364916731037084,
+            "groundSpeedKt": 19.364916731037084,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 784.2791276070019
+          },
+          {
+            "name": "final",
+            "headingDeg": 180,
+            "trackHeadingDeg": 180,
+            "alongLegSpeedKt": 15,
+            "groundSpeedKt": 15,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 607.5000000000001
+          }
+        ],
+        "metrics": {
+          "wingLoading": 1,
+          "estAirspeedKt": 20,
+          "estSinkFps": 12.50230452674897
+        },
+        "warnings": [],
+        "blocked": false
+      }
+    },
+    {
+      "name": "strong_headwind",
+      "input": {
+        "touchdownLat": 37,
+        "touchdownLng": -122,
+        "landingHeadingDeg": 180,
+        "side": "left",
+        "baseLegDrift": true,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 170,
+          "canopyAreaSqft": 170
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 15,
+            "dirFromDeg": 180,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 15,
+            "dirFromDeg": 180,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 15,
+            "dirFromDeg": 180,
+            "source": "auto"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "downwind_start",
+            "lat": 36.994993131868135,
+            "lng": -122.0027863458327,
+            "altFt": 900
+          },
+          {
+            "name": "base_start",
+            "lat": 36.99888736263736,
+            "lng": -122.0027863458327,
+            "altFt": 600
+          },
+          {
+            "name": "final_start",
+            "lat": 37.00055631868132,
+            "lng": -122,
+            "altFt": 300
+          },
+          {
+            "name": "touchdown",
+            "lat": 37,
+            "lng": -122,
+            "altFt": 0
+          }
+        ],
+        "segments": [
+          {
+            "name": "downwind",
+            "headingDeg": 0,
+            "trackHeadingDeg": 0,
+            "alongLegSpeedKt": 35,
+            "groundSpeedKt": 35,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1417.5
+          },
+          {
+            "name": "base",
+            "headingDeg": 90,
+            "trackHeadingDeg": 53.13010235415595,
+            "alongLegSpeedKt": 20,
+            "groundSpeedKt": 25,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1012.5
+          },
+          {
+            "name": "final",
+            "headingDeg": 180,
+            "trackHeadingDeg": 180,
+            "alongLegSpeedKt": 5,
+            "groundSpeedKt": 5,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 202.5
+          }
+        ],
+        "metrics": {
+          "wingLoading": 1,
+          "estAirspeedKt": 20,
+          "estSinkFps": 12.50230452674897
+        },
+        "warnings": [],
+        "blocked": false
+      }
+    },
+    {
+      "name": "high_wing_loading_block",
+      "input": {
+        "touchdownLat": 37,
+        "touchdownLng": -122,
+        "landingHeadingDeg": 180,
+        "side": "left",
+        "baseLegDrift": true,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 260,
+          "canopyAreaSqft": 130
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 5,
+            "dirFromDeg": 270,
+            "source": "auto"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "touchdown",
+            "lat": 37,
+            "lng": -122,
+            "altFt": 0
+          }
+        ],
+        "segments": [],
+        "metrics": {
+          "wingLoading": 2,
+          "estAirspeedKt": 28.284271247461902,
+          "estSinkFps": 17.680928622646935
+        },
+        "warnings": [
+          "Wing loading 2.00 exceeds model limit (1.7). Pattern output is disabled."
+        ],
+        "blocked": true
+      }
+    },
+    {
+      "name": "non_us_location_high_wind",
+      "input": {
+        "touchdownLat": 19.6542,
+        "touchdownLng": 109.1796,
+        "landingHeadingDeg": 130,
+        "side": "left",
+        "baseLegDrift": true,
+        "gatesFt": [
+          900,
+          600,
+          300,
+          0
+        ],
+        "canopy": {
+          "manufacturer": "PD",
+          "model": "Sabre3",
+          "sizeSqft": 170,
+          "wlRef": 1,
+          "airspeedRefKt": 20,
+          "airspeedWlExponent": 0.5,
+          "airspeedMinKt": 8,
+          "airspeedMaxKt": 35,
+          "glideRatio": 2.7
+        },
+        "jumper": {
+          "exitWeightLb": 170,
+          "canopyAreaSqft": 170
+        },
+        "winds": [
+          {
+            "altitudeFt": 900,
+            "speedKt": 22,
+            "dirFromDeg": 310,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 600,
+            "speedKt": 18,
+            "dirFromDeg": 300,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 300,
+            "speedKt": 14,
+            "dirFromDeg": 290,
+            "source": "manual"
+          }
+        ]
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      },
+      "output": {
+        "waypoints": [
+          {
+            "name": "downwind_start",
+            "lat": 19.65596941391379,
+            "lng": 109.17311024741682,
+            "altFt": 900
+          },
+          {
+            "name": "base_start",
+            "lat": 19.655826376011635,
+            "lng": 109.17329125914746,
+            "altFt": 600
+          },
+          {
+            "name": "final_start",
+            "lat": 19.65652966172297,
+            "lng": 109.17665185762696,
+            "altFt": 300
+          },
+          {
+            "name": "touchdown",
+            "lat": 19.6542,
+            "lng": 109.1796,
+            "altFt": 0
+          }
+        ],
+        "segments": [
+          {
+            "name": "downwind",
+            "headingDeg": 310,
+            "trackHeadingDeg": 310,
+            "alongLegSpeedKt": -2,
+            "groundSpeedKt": 2,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 81
+          },
+          {
+            "name": "base",
+            "headingDeg": 40,
+            "trackHeadingDeg": 77.47128169026786,
+            "alongLegSpeedKt": 23.125667198004745,
+            "groundSpeedKt": 29.138062528592908,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1180.0915324080127
+          },
+          {
+            "name": "final",
+            "headingDeg": 143.85196268046775,
+            "trackHeadingDeg": 130,
+            "alongLegSpeedKt": 32.57404768756419,
+            "groundSpeedKt": 32.57404768756419,
+            "timeSec": 23.99557612423718,
+            "distanceFt": 1319.2489313463498
+          }
+        ],
+        "metrics": {
+          "wingLoading": 1,
+          "estAirspeedKt": 20,
+          "estSinkFps": 12.50230452674897
+        },
+        "warnings": [
+          "Downwind leg tracks backward (-2.0 kt)."
+        ],
+        "blocked": false
+      }
+    }
+  ]
+}
