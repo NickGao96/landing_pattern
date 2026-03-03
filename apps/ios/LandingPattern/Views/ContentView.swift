@@ -64,21 +64,44 @@ struct ContentView: View {
 
     private var mapPanel: some View {
         let output = store.patternOutput
+        let basemapStyle: LandingBasemapStyle = store.mapStackChoice == .mapKit ? .appleDefault : .tokenlessSatellite
         return ZStack(alignment: .topLeading) {
-            MapKitLandingMapView(
-                touchdown: store.touchdown,
-                waypoints: output.waypoints,
-                blocked: output.blocked,
-                hasWarnings: !output.warnings.isEmpty,
-                landingHeadingDeg: store.landingHeadingDeg,
-                windLayers: store.windLayers,
-                onTouchdownChange: { coordinate in
-                    store.setTouchdown(coordinate)
-                },
-                onHeadingChange: { coordinate in
-                    store.setHeadingFromHandle(coordinate)
+            Group {
+                switch store.mapStackChoice {
+                case .mapKit:
+                    MapKitLandingMapView(
+                        touchdown: store.touchdown,
+                        waypoints: output.waypoints,
+                        blocked: output.blocked,
+                        hasWarnings: !output.warnings.isEmpty,
+                        landingHeadingDeg: store.landingHeadingDeg,
+                        basemapStyle: basemapStyle,
+                        windLayers: store.windLayers,
+                        onTouchdownChange: { coordinate in
+                            store.setTouchdown(coordinate)
+                        },
+                        onHeadingChange: { coordinate in
+                            store.setHeadingFromHandle(coordinate)
+                        }
+                    )
+                case .mapbox:
+                    MapboxLandingMapView(
+                        touchdown: store.touchdown,
+                        waypoints: output.waypoints,
+                        blocked: output.blocked,
+                        hasWarnings: !output.warnings.isEmpty,
+                        landingHeadingDeg: store.landingHeadingDeg,
+                        basemapStyle: basemapStyle,
+                        windLayers: store.windLayers,
+                        onTouchdownChange: { coordinate in
+                            store.setTouchdown(coordinate)
+                        },
+                        onHeadingChange: { coordinate in
+                            store.setHeadingFromHandle(coordinate)
+                        }
+                    )
                 }
-            )
+            }
 
             statusBadge
                 .padding(12)
@@ -353,8 +376,12 @@ struct ContentView: View {
     private var mapStackSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: t.mapStackSection)
-            Text(t.mapStackMapKitOnly)
-                .font(.subheadline.weight(.semibold))
+            Picker(t.mapStackSection, selection: $store.mapStackChoice) {
+                ForEach(MapStackChoice.allCases) { choice in
+                    Text(choice.title).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
             Text(t.mapStackTokenless)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -362,7 +389,7 @@ struct ContentView: View {
     }
 
     private func chooseDefaultMapStack() {
-        store.mapStackChoice = .mapKit
+        // Preserve persisted map choice; store default remains MapKit.
     }
 
     private func gateBinding(_ index: Int) -> Binding<Double> {
@@ -429,18 +456,33 @@ private struct WindLegendView: View {
     let windLayers: [WindLayer]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "wind")
+                    .font(.caption.weight(.semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+            }
             ForEach(Array(windLayers.sorted(by: { $0.altitudeFt > $1.altitudeFt }).enumerated()), id: \.offset) { _, layer in
-                Text(String(format: "%.0fft  %.1fkt from %.0fdeg", layer.altitudeFt, layer.speedKt, layer.dirFromDeg))
-                    .font(.caption2.monospacedDigit())
+                HStack(spacing: 8) {
+                    Text(String(format: "%.0fft", layer.altitudeFt))
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.18))
+                        .clipShape(Capsule())
+                    Text(String(format: "%.1fkt from %.0fdeg", layer.speedKt, layer.dirFromDeg))
+                        .font(.caption2.monospacedDigit())
+                }
             }
         }
-        .padding(10)
-        .background(Color.black.opacity(0.6))
-        .foregroundColor(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(11)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
     }
 }
 
