@@ -1,4 +1,5 @@
 import type {
+  FlightMode,
   PatternInput,
   PatternOutput,
   SegmentName,
@@ -45,6 +46,18 @@ interface SegmentSolveResult {
   blockedReason?: string;
 }
 
+interface SegmentDefinition {
+  name: SegmentName;
+  headingDeg: number;
+  startAltFt: number;
+  endAltFt: number;
+  solveKind: "drift" | "trackLocked";
+}
+
+function resolveMode(input: PatternInput): FlightMode {
+  return input.mode === "wingsuit" ? "wingsuit" : "canopy";
+}
+
 function isFiniteNumber(value: number): boolean {
   return Number.isFinite(value);
 }
@@ -71,18 +84,6 @@ function computeSinkFps(airspeedKt: number, glideRatio: number): number {
   return airspeedFps / glideRatio;
 }
 
-function findRequiredWinds(gatesFt: [number, number, number, number], winds: WindLayer[]): string[] {
-  const required = [gatesFt[0], gatesFt[1], gatesFt[2]];
-  const errors: string[] = [];
-  for (const altitude of required) {
-    const layer = getWindForAltitude(altitude, winds);
-    if (!layer) {
-      errors.push(`Missing wind layer around ${altitude} ft.`);
-    }
-  }
-  return errors;
-}
-
 function computeLegHeading(landingHeadingDeg: number, side: "left" | "right", segment: SegmentName): number {
   if (segment === "final") {
     return normalizeHeading(landingHeadingDeg);
@@ -95,6 +96,61 @@ function computeLegHeading(landingHeadingDeg: number, side: "left" | "right", se
 
 function vectorToHeadingDeg(vector: { east: number; north: number }): number {
   return normalizeHeading((Math.atan2(vector.east, vector.north) * 180) / Math.PI);
+}
+
+function buildSegmentDefinitions(input: PatternInput): SegmentDefinition[] {
+  const [downwindGate = 0, baseGate = 0, finalGate = 0, touchdownGate = 0] = input.gatesFt;
+  const baseLegDrift = input.baseLegDrift !== false;
+
+  return [
+    {
+      name: "downwind",
+      headingDeg: computeLegHeading(input.landingHeadingDeg, input.side, "downwind"),
+      startAltFt: downwindGate,
+      endAltFt: baseGate,
+      solveKind: "trackLocked",
+    },
+    {
+      name: "base",
+      headingDeg: computeLegHeading(input.landingHeadingDeg, input.side, "base"),
+      startAltFt: baseGate,
+      endAltFt: finalGate,
+      solveKind: baseLegDrift ? "drift" : "trackLocked",
+    },
+    {
+      name: "final",
+      headingDeg: computeLegHeading(input.landingHeadingDeg, input.side, "final"),
+      startAltFt: finalGate,
+      endAltFt: touchdownGate,
+      solveKind: "trackLocked",
+    },
+  ];
+}
+
+function getActiveSegmentDefinitions(input: PatternInput): SegmentDefinition[] {
+  const mode = resolveMode(input);
+  const definitions = buildSegmentDefinitions(input);
+
+  if (mode === "canopy") {
+    return definitions;
+  }
+
+  return definitions.filter((definition) => definition.startAltFt > definition.endAltFt);
+}
+
+function getRequiredWindAltitudes(input: PatternInput): number[] {
+  return getActiveSegmentDefinitions(input).map((definition) => definition.startAltFt);
+}
+
+function findRequiredWinds(input: PatternInput, winds: WindLayer[]): string[] {
+  const errors: string[] = [];
+  for (const altitude of getRequiredWindAltitudes(input)) {
+    const layer = getWindForAltitude(altitude, winds);
+    if (!layer) {
+      errors.push(`Missing wind layer around ${altitude} ft.`);
+    }
+  }
+  return errors;
 }
 
 function computeDriftSegment(
@@ -157,7 +213,7 @@ function computeTrackLockedSegment(
   if (Math.abs(windCross) >= airspeedKt) {
     return {
       segment: null,
-      blockedReason: `${name} leg crosswind (${Math.abs(windCross).toFixed(1)} kt) exceeds canopy airspeed capability.`,
+      blockedReason: `${name} leg crosswind (${Math.abs(windCross).toFixed(1)} kt) exceeds airspeed capability.`,
     };
   }
 
@@ -190,7 +246,26 @@ function computeTrackLockedSegment(
   };
 }
 
+function defaultMetricsForMode(mode: FlightMode): PatternOutput["metrics"] {
+  return {
+    wingLoading: mode === "canopy" ? 0 : null,
+    estAirspeedKt: 0,
+    estSinkFps: 0,
+  };
+}
+
+function getWaypointNameForSegment(name: SegmentName): "downwind_start" | "base_start" | "final_start" {
+  if (name === "downwind") {
+    return "downwind_start";
+  }
+  if (name === "base") {
+    return "base_start";
+  }
+  return "final_start";
+}
+
 export function validatePatternInput(input: PatternInput): ValidationResult {
+  const mode = resolveMode(input);
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -202,39 +277,59 @@ export function validatePatternInput(input: PatternInput): ValidationResult {
     errors.push("Landing heading must be a finite degree value.");
   }
 
-  if (
-    !isFiniteNumber(input.jumper.exitWeightLb) ||
-    !isFiniteNumber(input.jumper.canopyAreaSqft) ||
-    input.jumper.exitWeightLb <= 0 ||
-    input.jumper.canopyAreaSqft <= 0
-  ) {
-    errors.push("Exit weight and canopy area must be finite and positive.");
-  }
+  if (mode === "canopy") {
+    if (
+      !isFiniteNumber(input.jumper.exitWeightLb) ||
+      !isFiniteNumber(input.jumper.canopyAreaSqft) ||
+      input.jumper.exitWeightLb <= 0 ||
+      input.jumper.canopyAreaSqft <= 0
+    ) {
+      errors.push("Exit weight and canopy area must be finite and positive.");
+    }
 
-  if (
-    !isFiniteNumber(input.canopy.wlRef) ||
-    !isFiniteNumber(input.canopy.airspeedRefKt) ||
-    !isFiniteNumber(input.canopy.glideRatio) ||
-    input.canopy.wlRef <= 0 ||
-    input.canopy.airspeedRefKt <= 0 ||
-    input.canopy.glideRatio <= 0
-  ) {
-    errors.push("Canopy reference values must be finite and positive.");
-  }
+    if (
+      !isFiniteNumber(input.canopy.wlRef) ||
+      !isFiniteNumber(input.canopy.airspeedRefKt) ||
+      !isFiniteNumber(input.canopy.glideRatio) ||
+      input.canopy.wlRef <= 0 ||
+      input.canopy.airspeedRefKt <= 0 ||
+      input.canopy.glideRatio <= 0
+    ) {
+      errors.push("Canopy reference values must be finite and positive.");
+    }
 
-  if (
-    (input.canopy.airspeedWlExponent !== undefined && !isFiniteNumber(input.canopy.airspeedWlExponent)) ||
-    (input.canopy.airspeedMinKt !== undefined && !isFiniteNumber(input.canopy.airspeedMinKt)) ||
-    (input.canopy.airspeedMaxKt !== undefined && !isFiniteNumber(input.canopy.airspeedMaxKt))
+    if (
+      (input.canopy.airspeedWlExponent !== undefined && !isFiniteNumber(input.canopy.airspeedWlExponent)) ||
+      (input.canopy.airspeedMinKt !== undefined && !isFiniteNumber(input.canopy.airspeedMinKt)) ||
+      (input.canopy.airspeedMaxKt !== undefined && !isFiniteNumber(input.canopy.airspeedMaxKt))
+    ) {
+      errors.push("Canopy tuning values must be finite when provided.");
+    }
+  } else if (
+    !isFiniteNumber(input.wingsuit?.flightSpeedKt) ||
+    !isFiniteNumber(input.wingsuit?.fallRateFps) ||
+    input.wingsuit.flightSpeedKt <= 0 ||
+    input.wingsuit.fallRateFps <= 0
   ) {
-    errors.push("Canopy tuning values must be finite when provided.");
+    errors.push("Wingsuit flight speed and fall rate must be finite and positive.");
   }
 
   const [downwindGate, baseGate, finalGate, touchdownGate] = input.gatesFt;
-  if (input.gatesFt.some((gate) => !isFiniteNumber(gate))) {
+  if (input.gatesFt.length !== 4) {
+    errors.push("Gate altitudes must contain exactly 4 values.");
+  } else if (input.gatesFt.some((gate) => !isFiniteNumber(gate))) {
     errors.push("Gate altitudes must be finite numeric values.");
-  } else if (!(downwindGate > baseGate && baseGate > finalGate && finalGate > touchdownGate)) {
-    errors.push("Gate altitudes must be strictly descending, for example 900 > 600 > 300 > 0.");
+  } else if (mode === "canopy") {
+    if (!(downwindGate > baseGate && baseGate > finalGate && finalGate > touchdownGate)) {
+      errors.push("Gate altitudes must be strictly descending, for example 900 > 600 > 300 > 0.");
+    }
+  } else {
+    if (!(downwindGate >= baseGate && baseGate >= finalGate && finalGate > touchdownGate)) {
+      errors.push("Wingsuit gate altitudes must be non-increasing with an active final leg, for example 3000 >= 2000 >= 1000 > 0.");
+    }
+    if (downwindGate === baseGate && baseGate === finalGate) {
+      errors.push("Wingsuit mode requires at least two active legs. Only one of the first two legs may disappear.");
+    }
   }
 
   if (touchdownGate !== 0) {
@@ -251,7 +346,7 @@ export function validatePatternInput(input: PatternInput): ValidationResult {
     }
   }
 
-  errors.push(...findRequiredWinds(input.gatesFt, input.winds));
+  errors.push(...findRequiredWinds(input, input.winds));
 
   return {
     valid: errors.length === 0,
@@ -261,6 +356,7 @@ export function validatePatternInput(input: PatternInput): ValidationResult {
 }
 
 export function computePattern(input: PatternInput): PatternOutput {
+  const mode = resolveMode(input);
   const validation = validatePatternInput(input);
   const warnings: string[] = [...validation.warnings];
 
@@ -271,96 +367,68 @@ export function computePattern(input: PatternInput): PatternOutput {
           name: "touchdown",
           lat: input.touchdownLat,
           lng: input.touchdownLng,
-          altFt: input.gatesFt[3],
+          altFt: input.gatesFt[3] ?? input.gatesFt[input.gatesFt.length - 1] ?? 0,
         },
       ],
       segments: [],
-      metrics: {
-        wingLoading: 0,
-        estAirspeedKt: 0,
-        estSinkFps: 0,
-      },
+      metrics: defaultMetricsForMode(mode),
       warnings: [...warnings, ...validation.errors],
       blocked: true,
     };
   }
 
-  const wingLoading = computeWingLoading(input.jumper.exitWeightLb, input.jumper.canopyAreaSqft);
-  const airspeedKt = computeAirspeedKt(input, wingLoading);
-  const sinkFps = computeSinkFps(airspeedKt, input.canopy.glideRatio);
+  const wingLoading =
+    mode === "canopy" ? computeWingLoading(input.jumper.exitWeightLb, input.jumper.canopyAreaSqft) : null;
+  const airspeedKt = mode === "canopy" ? computeAirspeedKt(input, wingLoading ?? 0) : input.wingsuit.flightSpeedKt;
+  const sinkFps = mode === "canopy" ? computeSinkFps(airspeedKt, input.canopy.glideRatio) : input.wingsuit.fallRateFps;
 
-  if (wingLoading > WL_MAX) {
+  if (mode === "canopy" && (wingLoading ?? 0) > WL_MAX) {
     warnings.push(
-      `Wing loading ${wingLoading.toFixed(2)} exceeds model limit (${WL_MAX.toFixed(1)}). Pattern output is disabled.`,
+      `Wing loading ${(wingLoading ?? 0).toFixed(2)} exceeds model limit (${WL_MAX.toFixed(1)}). Pattern output is disabled.`,
     );
   }
 
-  const downwindHeading = computeLegHeading(input.landingHeadingDeg, input.side, "downwind");
-  const baseHeading = computeLegHeading(input.landingHeadingDeg, input.side, "base");
-  const finalHeading = computeLegHeading(input.landingHeadingDeg, input.side, "final");
-  const baseLegDrift = input.baseLegDrift !== false;
-
-  const downwindResult = computeTrackLockedSegment(
-    "downwind",
-    downwindHeading,
-    input.gatesFt[0],
-    input.gatesFt[1],
-    input.winds,
-    airspeedKt,
-    sinkFps,
-  );
-  const baseResult = baseLegDrift
-    ? computeDriftSegment(
-        "base",
-        baseHeading,
-        input.gatesFt[1],
-        input.gatesFt[2],
-        input.winds,
-        airspeedKt,
-        sinkFps,
-      )
-    : computeTrackLockedSegment(
-        "base",
-        baseHeading,
-        input.gatesFt[1],
-        input.gatesFt[2],
-        input.winds,
-        airspeedKt,
-        sinkFps,
-      );
-  const finalResult = computeTrackLockedSegment(
-    "final",
-    finalHeading,
-    input.gatesFt[2],
-    input.gatesFt[3],
-    input.winds,
-    airspeedKt,
-    sinkFps,
+  const activeDefinitions = getActiveSegmentDefinitions(input);
+  const solvedSegments = activeDefinitions.map((definition) =>
+    definition.solveKind === "drift"
+      ? computeDriftSegment(
+          definition.name,
+          definition.headingDeg,
+          definition.startAltFt,
+          definition.endAltFt,
+          input.winds,
+          airspeedKt,
+          sinkFps,
+        )
+      : computeTrackLockedSegment(
+          definition.name,
+          definition.headingDeg,
+          definition.startAltFt,
+          definition.endAltFt,
+          input.winds,
+          airspeedKt,
+          sinkFps,
+        ),
   );
 
-  if (downwindResult.blockedReason) {
-    warnings.push(downwindResult.blockedReason);
-  }
-  if (baseResult.blockedReason) {
-    warnings.push(baseResult.blockedReason);
-  }
-  if (finalResult.blockedReason) {
-    warnings.push(finalResult.blockedReason);
+  for (const result of solvedSegments) {
+    if (result.blockedReason) {
+      warnings.push(result.blockedReason);
+    }
   }
 
-  const downwind = downwindResult.segment;
-  const base = baseResult.segment;
-  const final = finalResult.segment;
-  if (downwind && downwind.alongLegSpeedKt < 0) {
-    warnings.push(`Downwind leg tracks backward (${downwind.alongLegSpeedKt.toFixed(1)} kt).`);
+  const activeSegments = solvedSegments
+    .map((result) => result.segment)
+    .filter((segment): segment is SegmentComputation => segment !== null);
+
+  for (const segment of activeSegments) {
+    if (segment.alongLegSpeedKt < 0) {
+      warnings.push(`${segment.name[0]!.toUpperCase()}${segment.name.slice(1)} leg tracks backward (${segment.alongLegSpeedKt.toFixed(1)} kt).`);
+    }
   }
-  if (base && base.alongLegSpeedKt < 0) {
-    warnings.push(`Base leg tracks backward (${base.alongLegSpeedKt.toFixed(1)} kt).`);
-  }
-  if (final && final.alongLegSpeedKt < 0) {
-    warnings.push(`Final leg tracks backward (${final.alongLegSpeedKt.toFixed(1)} kt).`);
-  }
-  const finalForwardSpeedKt = final ? final.alongLegSpeedKt : 0;
+
+  const finalSegment = activeSegments.find((segment) => segment.name === "final");
+  const finalForwardSpeedKt = finalSegment ? finalSegment.alongLegSpeedKt : 0;
   if (finalForwardSpeedKt < MIN_FINAL_FORWARD_GROUND_SPEED_KT) {
     warnings.push(
       `Final-leg penetration is low (${finalForwardSpeedKt.toFixed(1)} kt along final). Consider a safer landing direction.`,
@@ -368,100 +436,84 @@ export function computePattern(input: PatternInput): PatternOutput {
   }
 
   const blocked =
-    wingLoading > WL_MAX ||
+    (mode === "canopy" && (wingLoading ?? 0) > WL_MAX) ||
     !Number.isFinite(sinkFps) ||
     sinkFps <= 0 ||
-    !downwind ||
-    !base ||
-    !final;
+    activeSegments.length !== activeDefinitions.length;
+
+  const metrics: PatternOutput["metrics"] = {
+    wingLoading,
+    estAirspeedKt: airspeedKt,
+    estSinkFps: sinkFps,
+  };
+
+  if (blocked) {
+    return {
+      waypoints: [
+        {
+          name: "touchdown",
+          lat: input.touchdownLat,
+          lng: input.touchdownLng,
+          altFt: input.gatesFt[3],
+        },
+      ],
+      segments: [],
+      metrics,
+      warnings,
+      blocked: true,
+    };
+  }
 
   const touchdown: LocalPoint = { eastFt: 0, northFt: 0 };
-  const finalGroundUnit = unitOrZero(final?.groundVectorKt ?? { east: 0, north: 0 });
-  const downwindGroundUnit = unitOrZero(downwind?.groundVectorKt ?? { east: 0, north: 0 });
+  const segmentStarts = new Map<SegmentName, LocalPoint>();
+  let segmentEnd = touchdown;
 
-  const finalDistance = final?.distanceFt ?? 0;
-  const finalStart: LocalPoint = {
-    eastFt: touchdown.eastFt - finalGroundUnit.east * finalDistance,
-    northFt: touchdown.northFt - finalGroundUnit.north * finalDistance,
-  };
+  for (let index = activeSegments.length - 1; index >= 0; index -= 1) {
+    const segment = activeSegments[index]!;
+    const groundUnit = unitOrZero(segment.groundVectorKt);
+    const segmentStart = {
+      eastFt: segmentEnd.eastFt - groundUnit.east * segment.distanceFt,
+      northFt: segmentEnd.northFt - groundUnit.north * segment.distanceFt,
+    };
+    segmentStarts.set(segment.name, segmentStart);
+    segmentEnd = segmentStart;
+  }
 
-  const baseGroundUnit = unitOrZero(base?.groundVectorKt ?? { east: 0, north: 0 });
-  const baseDistance = base?.distanceFt ?? 0;
-  const baseStart: LocalPoint = {
-    eastFt: finalStart.eastFt - baseGroundUnit.east * baseDistance,
-    northFt: finalStart.northFt - baseGroundUnit.north * baseDistance,
-  };
-
-  const downwindDistance = downwind?.distanceFt ?? 0;
-  const downwindStart: LocalPoint = {
-    eastFt: baseStart.eastFt - downwindGroundUnit.east * downwindDistance,
-    northFt: baseStart.northFt - downwindGroundUnit.north * downwindDistance,
-  };
+  const waypoints = activeDefinitions.map((definition) => {
+    const start = segmentStarts.get(definition.name)!;
+    const geo = localFeetToLatLng(input.touchdownLat, input.touchdownLng, start.eastFt, start.northFt);
+    return {
+      name: getWaypointNameForSegment(definition.name),
+      lat: geo.lat,
+      lng: geo.lng,
+      altFt: definition.startAltFt,
+    };
+  });
 
   const touchdownGeo = localFeetToLatLng(input.touchdownLat, input.touchdownLng, touchdown.eastFt, touchdown.northFt);
-  const finalStartGeo = localFeetToLatLng(input.touchdownLat, input.touchdownLng, finalStart.eastFt, finalStart.northFt);
-  const baseStartGeo = localFeetToLatLng(input.touchdownLat, input.touchdownLng, baseStart.eastFt, baseStart.northFt);
-  const downwindStartGeo = localFeetToLatLng(
-    input.touchdownLat,
-    input.touchdownLng,
-    downwindStart.eastFt,
-    downwindStart.northFt,
-  );
 
   return {
-    waypoints: blocked
-      ? [
-          {
-            name: "touchdown",
-            lat: input.touchdownLat,
-            lng: input.touchdownLng,
-            altFt: input.gatesFt[3],
-          },
-        ]
-      : [
-          {
-            name: "downwind_start",
-            lat: downwindStartGeo.lat,
-            lng: downwindStartGeo.lng,
-            altFt: input.gatesFt[0],
-          },
-          {
-            name: "base_start",
-            lat: baseStartGeo.lat,
-            lng: baseStartGeo.lng,
-            altFt: input.gatesFt[1],
-          },
-          {
-            name: "final_start",
-            lat: finalStartGeo.lat,
-            lng: finalStartGeo.lng,
-            altFt: input.gatesFt[2],
-          },
-          {
-            name: "touchdown",
-            lat: touchdownGeo.lat,
-            lng: touchdownGeo.lng,
-            altFt: input.gatesFt[3],
-          },
-        ],
-    segments: blocked
-      ? []
-      : [downwind, base, final].map((segment) => ({
-          name: segment!.name,
-          headingDeg: segment!.headingDeg,
-          trackHeadingDeg: segment!.trackHeadingDeg,
-          alongLegSpeedKt: segment!.alongLegSpeedKt,
-          groundSpeedKt: segment!.groundSpeedKt,
-          timeSec: segment!.timeSec,
-          distanceFt: segment!.distanceFt,
-        })),
-    metrics: {
-      wingLoading,
-      estAirspeedKt: airspeedKt,
-      estSinkFps: sinkFps,
-    },
+    waypoints: [
+      ...waypoints,
+      {
+        name: "touchdown",
+        lat: touchdownGeo.lat,
+        lng: touchdownGeo.lng,
+        altFt: input.gatesFt[3],
+      },
+    ],
+    segments: activeSegments.map((segment) => ({
+      name: segment.name,
+      headingDeg: segment.headingDeg,
+      trackHeadingDeg: segment.trackHeadingDeg,
+      alongLegSpeedKt: segment.alongLegSpeedKt,
+      groundSpeedKt: segment.groundSpeedKt,
+      timeSec: segment.timeSec,
+      distanceFt: segment.distanceFt,
+    })),
+    metrics,
     warnings,
-    blocked,
+    blocked: false,
   };
 }
 

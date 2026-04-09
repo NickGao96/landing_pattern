@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PatternWaypoint, WindLayer } from "@landing/ui-types";
 import { resolveMapFallbackStyle, resolveMapStyle } from "../lib/mapStyle";
 import type { Language } from "../store";
@@ -17,6 +17,9 @@ interface MapPanelProps {
 
 const overlaySourceId = "overlay-source";
 const headingHandleDistanceMeters = 180;
+const headingHandleDistancePixels = 56;
+const patternFitPaddingPixels = 48;
+const patternMinViewportFraction = 0.2;
 const earthRadiusMeters = 6_371_000;
 const mapTexts: Record<
   Language,
@@ -125,6 +128,7 @@ function buildOverlayFeatures(
   touchdown: { lat: number; lng: number },
   waypoints: PatternWaypoint[],
   landingHeadingDeg: number,
+  headingHandle?: { lat: number; lng: number },
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
 
@@ -190,12 +194,14 @@ function buildOverlayFeatures(
     });
   }
 
-  const headingTip = destinationPoint(
-    touchdown.lat,
-    touchdown.lng,
-    landingHeadingDeg,
-    headingHandleDistanceMeters,
-  );
+  const headingTip =
+    headingHandle ??
+    destinationPoint(
+      touchdown.lat,
+      touchdown.lng,
+      landingHeadingDeg,
+      headingHandleDistanceMeters,
+    );
 
   features.push({
     type: "Feature",
@@ -228,6 +234,119 @@ function buildOverlayFeatures(
     type: "FeatureCollection",
     features,
   };
+}
+
+function headingHandlePointForView(
+  map: import("maplibre-gl").Map,
+  touchdown: { lat: number; lng: number },
+  landingHeadingDeg: number,
+): { lat: number; lng: number } {
+  const touchdownPoint = map.project([touchdown.lng, touchdown.lat]);
+  const bearingRad = toRadians(normalizeHeading(landingHeadingDeg));
+  const handlePoint = {
+    x: touchdownPoint.x + Math.sin(bearingRad) * headingHandleDistancePixels,
+    y: touchdownPoint.y - Math.cos(bearingRad) * headingHandleDistancePixels,
+  };
+  const lngLat = map.unproject([handlePoint.x, handlePoint.y]);
+  return { lat: lngLat.lat, lng: lngLat.lng };
+}
+
+function buildOverlayForCurrentView(
+  map: import("maplibre-gl").Map,
+  touchdown: { lat: number; lng: number },
+  waypoints: PatternWaypoint[],
+  landingHeadingDeg: number,
+): {
+  headingPoint: { lat: number; lng: number };
+  data: GeoJSON.FeatureCollection;
+} {
+  const headingPoint = headingHandlePointForView(map, touchdown, landingHeadingDeg);
+  return {
+    headingPoint,
+    data: buildOverlayFeatures(touchdown, waypoints, landingHeadingDeg, headingPoint),
+  };
+}
+
+function getPatternPoints(
+  touchdown: { lat: number; lng: number },
+  waypoints: PatternWaypoint[],
+): Array<{ lat: number; lng: number }> {
+  return [touchdown, ...waypoints.map((waypoint) => ({ lat: waypoint.lat, lng: waypoint.lng }))];
+}
+
+function shouldFitPatternInView(
+  map: import("maplibre-gl").Map,
+  touchdown: { lat: number; lng: number },
+  waypoints: PatternWaypoint[],
+): boolean {
+  const points = getPatternPoints(touchdown, waypoints);
+  if (points.length <= 1) {
+    return false;
+  }
+
+  const canvas = map.getCanvas();
+  const viewWidth = canvas.clientWidth;
+  const viewHeight = canvas.clientHeight;
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const point of points) {
+    const projected = map.project([point.lng, point.lat]);
+    minX = Math.min(minX, projected.x);
+    maxX = Math.max(maxX, projected.x);
+    minY = Math.min(minY, projected.y);
+    maxY = Math.max(maxY, projected.y);
+  }
+
+  const offscreen =
+    minX < patternFitPaddingPixels ||
+    maxX > viewWidth - patternFitPaddingPixels ||
+    minY < patternFitPaddingPixels ||
+    maxY > viewHeight - patternFitPaddingPixels;
+
+  const underfilled =
+    maxX - minX < viewWidth * patternMinViewportFraction &&
+    maxY - minY < viewHeight * patternMinViewportFraction;
+
+  return offscreen || underfilled;
+}
+
+function fitPatternInView(
+  map: import("maplibre-gl").Map,
+  touchdown: { lat: number; lng: number },
+  waypoints: PatternWaypoint[],
+): void {
+  const points = getPatternPoints(touchdown, waypoints);
+  if (points.length <= 1) {
+    map.easeTo({ center: [touchdown.lng, touchdown.lat], zoom: 16, duration: 350 });
+    return;
+  }
+
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  let minLat = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+
+  for (const point of points) {
+    minLng = Math.min(minLng, point.lng);
+    maxLng = Math.max(maxLng, point.lng);
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+  }
+
+  map.fitBounds(
+    [
+      [minLng, minLat],
+      [maxLng, maxLat],
+    ],
+    {
+      padding: patternFitPaddingPixels,
+      duration: 350,
+      maxZoom: 16,
+    },
+  );
 }
 
 function ensureOverlayLayers(map: import("maplibre-gl").Map, overlayData: GeoJSON.FeatureCollection): void {
@@ -362,22 +481,33 @@ export function MapPanel({
   const headingMarkerRef = useRef<import("maplibre-gl").Marker | null>(null);
   const fallbackStyleAppliedRef = useRef(false);
   const touchdownRef = useRef(touchdown);
+  const waypointsRef = useRef(waypoints);
+  const landingHeadingDegRef = useRef(landingHeadingDeg);
   const ignoreClickUntilMsRef = useRef(0);
   const [mapError, setMapError] = useState<string | null>(null);
+  touchdownRef.current = touchdown;
+  waypointsRef.current = waypoints;
+  landingHeadingDegRef.current = landingHeadingDeg;
 
-  const overlayGeoJson = useMemo(
-    () => buildOverlayFeatures(touchdown, waypoints, landingHeadingDeg),
-    [touchdown, waypoints, landingHeadingDeg],
-  );
-  const overlayGeoJsonRef = useRef(overlayGeoJson);
+  function syncOverlay(map: import("maplibre-gl").Map): void {
+    const overlay = buildOverlayForCurrentView(
+      map,
+      touchdownRef.current,
+      waypointsRef.current,
+      landingHeadingDegRef.current,
+    );
 
-  useEffect(() => {
-    touchdownRef.current = touchdown;
-  }, [touchdown]);
+    if (!map.getSource(overlaySourceId)) {
+      ensureOverlayLayers(map, overlay.data);
+    }
 
-  useEffect(() => {
-    overlayGeoJsonRef.current = overlayGeoJson;
-  }, [overlayGeoJson]);
+    const source = map.getSource(overlaySourceId) as import("maplibre-gl").GeoJSONSource | undefined;
+    if (source) {
+      source.setData(overlay.data);
+    }
+
+    headingMarkerRef.current?.setLngLat([overlay.headingPoint.lng, overlay.headingPoint.lat]);
+  }
 
   useEffect(() => {
     if (!mapContainerRef.current || isHeadlessEnvironment()) {
@@ -411,7 +541,11 @@ export function MapPanel({
         });
 
         map.on("load", () => {
-          ensureOverlayLayers(map, overlayGeoJsonRef.current);
+          syncOverlay(map);
+        });
+
+        map.on("zoom", () => {
+          syncOverlay(map);
         });
 
         map.on("click", (event) => {
@@ -439,9 +573,9 @@ export function MapPanel({
         });
 
         const headingPoint = destinationPoint(
-          touchdown.lat,
-          touchdown.lng,
-          landingHeadingDeg,
+          touchdownRef.current.lat,
+          touchdownRef.current.lng,
+          landingHeadingDegRef.current,
           headingHandleDistanceMeters,
         );
 
@@ -493,20 +627,13 @@ export function MapPanel({
 
     const map = mapRef.current;
     markerRef.current?.setLngLat([touchdown.lng, touchdown.lat]);
-    const headingPoint = destinationPoint(
-      touchdown.lat,
-      touchdown.lng,
-      landingHeadingDeg,
-      headingHandleDistanceMeters,
-    );
-    headingMarkerRef.current?.setLngLat([headingPoint.lng, headingPoint.lat]);
 
-    map.easeTo({ center: [touchdown.lng, touchdown.lat], duration: 350 });
-
-    const source = map.getSource(overlaySourceId) as import("maplibre-gl").GeoJSONSource | undefined;
-    if (source) {
-      source.setData(overlayGeoJson);
+    if (shouldFitPatternInView(map, touchdown, waypoints)) {
+      fitPatternInView(map, touchdown, waypoints);
+    } else {
+      map.easeTo({ center: [touchdown.lng, touchdown.lat], duration: 350 });
     }
+    syncOverlay(map);
 
     if (map.getLayer("pattern-line")) {
       map.setPaintProperty(
@@ -515,7 +642,7 @@ export function MapPanel({
         blocked ? "#b91c1c" : hasWarnings ? "#d97706" : "#16a34a",
       );
     }
-  }, [touchdown.lat, touchdown.lng, landingHeadingDeg, overlayGeoJson, blocked, hasWarnings]);
+  }, [touchdown.lat, touchdown.lng, waypoints, landingHeadingDeg, blocked, hasWarnings]);
 
   if (isHeadlessEnvironment()) {
     return (

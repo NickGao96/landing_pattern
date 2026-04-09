@@ -5,6 +5,19 @@ public enum PatternSide: String, Codable, CaseIterable {
     case right
 }
 
+public enum FlightMode: String, Codable, CaseIterable {
+    case canopy
+    case wingsuit
+}
+
+public enum WingsuitPresetId: String, Codable, CaseIterable {
+    case swift
+    case atc
+    case freak
+    case aura
+    case custom
+}
+
 public enum SegmentName: String, Codable, CaseIterable {
     case downwind
     case base
@@ -86,7 +99,22 @@ public struct JumperInput: Codable, Equatable {
     }
 }
 
+public struct WingsuitProfile: Codable, Equatable {
+    public var presetId: WingsuitPresetId?
+    public var name: String
+    public var flightSpeedKt: Double
+    public var fallRateFps: Double
+
+    public init(presetId: WingsuitPresetId? = nil, name: String, flightSpeedKt: Double, fallRateFps: Double) {
+        self.presetId = presetId
+        self.name = name
+        self.flightSpeedKt = flightSpeedKt
+        self.fallRateFps = fallRateFps
+    }
+}
+
 public struct PatternInput: Codable, Equatable {
+    public var mode: FlightMode
     public var touchdownLat: Double
     public var touchdownLng: Double
     public var landingHeadingDeg: Double
@@ -96,8 +124,10 @@ public struct PatternInput: Codable, Equatable {
     public var winds: [WindLayer]
     public var canopy: CanopyProfile
     public var jumper: JumperInput
+    public var wingsuit: WingsuitProfile
 
     public init(
+        mode: FlightMode,
         touchdownLat: Double,
         touchdownLng: Double,
         landingHeadingDeg: Double,
@@ -106,8 +136,10 @@ public struct PatternInput: Codable, Equatable {
         gatesFt: [Double],
         winds: [WindLayer],
         canopy: CanopyProfile,
-        jumper: JumperInput
+        jumper: JumperInput,
+        wingsuit: WingsuitProfile
     ) {
+        self.mode = mode
         self.touchdownLat = touchdownLat
         self.touchdownLng = touchdownLng
         self.landingHeadingDeg = landingHeadingDeg
@@ -117,6 +149,7 @@ public struct PatternInput: Codable, Equatable {
         self.winds = winds
         self.canopy = canopy
         self.jumper = jumper
+        self.wingsuit = wingsuit
     }
 }
 
@@ -170,11 +203,11 @@ public struct SegmentOutput: Codable, Equatable {
 }
 
 public struct PatternMetrics: Codable, Equatable {
-    public var wingLoading: Double
+    public var wingLoading: Double?
     public var estAirspeedKt: Double
     public var estSinkFps: Double
 
-    public init(wingLoading: Double, estAirspeedKt: Double, estSinkFps: Double) {
+    public init(wingLoading: Double?, estAirspeedKt: Double, estSinkFps: Double) {
         self.wingLoading = wingLoading
         self.estAirspeedKt = estAirspeedKt
         self.estSinkFps = estSinkFps

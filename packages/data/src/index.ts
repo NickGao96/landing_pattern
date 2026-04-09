@@ -62,6 +62,29 @@ const openMeteoSchema = z.object({
     .optional(),
 });
 
+const openMeteoUpperAirSchema = z.object({
+  elevation: z.number().optional(),
+  current: z
+    .object({
+      wind_speed_10m: z.number().nullable().optional(),
+      wind_direction_10m: z.number().nullable().optional(),
+    })
+    .optional(),
+  hourly: z.record(z.string(), z.array(z.union([z.number(), z.string(), z.null()]))).optional(),
+});
+
+const PRESSURE_LEVELS = [
+  "1000hPa",
+  "975hPa",
+  "950hPa",
+  "925hPa",
+  "900hPa",
+  "850hPa",
+  "800hPa",
+  "700hPa",
+  "600hPa",
+] as const;
+
 function knotsFromMetersPerSecond(valueMps: number): number {
   return valueMps * 1.94384449;
 }
@@ -72,6 +95,10 @@ function knotsFromMilesPerHour(valueMph: number): number {
 
 function knotsFromKilometersPerHour(valueKmh: number): number {
   return valueKmh * 0.539957;
+}
+
+function feetFromMeters(valueMeters: number): number {
+  return valueMeters * 3.280839895;
 }
 
 function normalizeUnitCode(unitCode?: string): string {
@@ -95,7 +122,6 @@ function observationSpeedToKnots(value: number, unitCode?: string): number {
     return value;
   }
 
-  // NWS observation values are typically SI m/s when unit metadata is absent.
   return knotsFromMetersPerSecond(value);
 }
 
@@ -204,6 +230,93 @@ async function fetchOpenMeteoSurfaceWind(
   }
 
   throw new Error("Open-Meteo response missing wind speed/direction.");
+}
+
+function getHourlyNumberAtIndex(
+  hourly: Record<string, Array<number | string | null>> | undefined,
+  key: string,
+  index: number,
+): number | undefined {
+  const value = hourly?.[key]?.[index];
+  return typeof value === "number" ? value : undefined;
+}
+
+export async function fetchWingsuitWindProfile(
+  lat: number,
+  lng: number,
+  altitudesFt: number[],
+  fetcher: typeof fetch = fetch,
+): Promise<WindLayer[]> {
+  if (altitudesFt.length === 0) {
+    return [];
+  }
+
+  const hourlyFields = PRESSURE_LEVELS.flatMap((level) => [
+    `wind_speed_${level}`,
+    `wind_direction_${level}`,
+    `geopotential_height_${level}`,
+  ]);
+
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}` +
+    `&longitude=${lng.toFixed(4)}` +
+    `&current=wind_speed_10m,wind_direction_10m` +
+    `&hourly=${hourlyFields.join(",")}` +
+    "&forecast_hours=1" +
+    "&wind_speed_unit=kn" +
+    "&timezone=UTC";
+
+  const payload = await fetchJson(url, fetcher);
+  const parsed = openMeteoUpperAirSchema.parse(payload);
+  const elevationFt = feetFromMeters(parsed.elevation ?? 0);
+
+  const candidates: Array<{ altitudeMslFt: number; speedKt: number; dirFromDeg: number }> = [];
+
+  const currentSpeed = parsed.current?.wind_speed_10m;
+  const currentDirection = parsed.current?.wind_direction_10m;
+  if (typeof currentSpeed === "number" && typeof currentDirection === "number") {
+    candidates.push({
+      altitudeMslFt: elevationFt + feetFromMeters(10),
+      speedKt: currentSpeed,
+      dirFromDeg: currentDirection,
+    });
+  }
+
+  for (const level of PRESSURE_LEVELS) {
+    const speedKt = getHourlyNumberAtIndex(parsed.hourly, `wind_speed_${level}`, 0);
+    const dirFromDeg = getHourlyNumberAtIndex(parsed.hourly, `wind_direction_${level}`, 0);
+    const heightMslMeters = getHourlyNumberAtIndex(parsed.hourly, `geopotential_height_${level}`, 0);
+    if (typeof speedKt === "number" && typeof dirFromDeg === "number" && typeof heightMslMeters === "number") {
+      candidates.push({
+        altitudeMslFt: feetFromMeters(heightMslMeters),
+        speedKt,
+        dirFromDeg,
+      });
+    }
+  }
+
+  if (candidates.length === 0) {
+    throw new Error("Open-Meteo upper-air response missing parseable winds.");
+  }
+
+  return altitudesFt.map((altitudeFt) => {
+    const requestedMslFt = altitudeFt + elevationFt;
+    const nearest = candidates.reduce((best, candidate) => {
+      if (!best) {
+        return candidate;
+      }
+      const bestDelta = Math.abs(best.altitudeMslFt - requestedMslFt);
+      const candidateDelta = Math.abs(candidate.altitudeMslFt - requestedMslFt);
+      return candidateDelta < bestDelta ? candidate : best;
+    });
+
+    return {
+      altitudeFt,
+      speedKt: nearest.speedKt,
+      dirFromDeg: nearest.dirFromDeg,
+      source: "auto",
+    };
+  });
 }
 
 export async function fetchNoaaSurfaceWind(

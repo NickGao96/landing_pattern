@@ -21,6 +21,7 @@ const { computePattern, validatePatternInput } = engineModule;
 const outputPath = resolve(__dirname, 'fixtures.json');
 
 const baseInput = {
+  mode: 'canopy',
   touchdownLat: 37,
   touchdownLng: -122,
   landingHeadingDeg: 180,
@@ -42,10 +43,31 @@ const baseInput = {
     exitWeightLb: 170,
     canopyAreaSqft: 170,
   },
+  wingsuit: {
+    name: 'Generic Wingsuit',
+    flightSpeedKt: 60,
+    fallRateFps: 12,
+  },
   winds: [
     { altitudeFt: 900, speedKt: 5, dirFromDeg: 270, source: 'auto' },
     { altitudeFt: 600, speedKt: 5, dirFromDeg: 270, source: 'auto' },
     { altitudeFt: 300, speedKt: 5, dirFromDeg: 270, source: 'auto' },
+  ],
+};
+
+const wingsuitInput = {
+  ...baseInput,
+  mode: 'wingsuit',
+  gatesFt: [3000, 2000, 1000, 0],
+  wingsuit: {
+    name: 'Swift',
+    flightSpeedKt: 60,
+    fallRateFps: 12,
+  },
+  winds: [
+    { altitudeFt: 3000, speedKt: 22, dirFromDeg: 310, source: 'manual' },
+    { altitudeFt: 2000, speedKt: 18, dirFromDeg: 300, source: 'manual' },
+    { altitudeFt: 1000, speedKt: 14, dirFromDeg: 290, source: 'manual' },
   ],
 };
 
@@ -91,10 +113,33 @@ const cases = [
       ],
     },
   },
+  { name: 'wingsuit_nominal', input: wingsuitInput },
+  {
+    name: 'wingsuit_first_leg_collapsed',
+    input: {
+      ...wingsuitInput,
+      gatesFt: [3000, 3000, 1000, 0],
+      winds: [
+        { altitudeFt: 3000, speedKt: 22, dirFromDeg: 310, source: 'manual' },
+        { altitudeFt: 1000, speedKt: 14, dirFromDeg: 290, source: 'manual' },
+      ],
+    },
+  },
+  {
+    name: 'wingsuit_middle_leg_collapsed',
+    input: {
+      ...wingsuitInput,
+      gatesFt: [3000, 1000, 1000, 0],
+      winds: [
+        { altitudeFt: 3000, speedKt: 22, dirFromDeg: 310, source: 'manual' },
+        { altitudeFt: 1000, speedKt: 14, dirFromDeg: 290, source: 'manual' },
+      ],
+    },
+  },
 ];
 
 const payload = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   tolerance: {
     headingDeg: 1.0,
     distancePct: 0.03,

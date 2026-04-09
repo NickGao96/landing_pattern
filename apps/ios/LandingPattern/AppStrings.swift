@@ -26,9 +26,13 @@ struct AppStrings {
     let searchPlaceholder: String
     let searchButton: String
     let fetchWindButton: String
+    let fetchWingsuitWindButton: String
     let headwindFinalButton: String
     let touchdownLabel: String
     let selectedResult: String
+    let modeSection: String
+    let modeCanopy: String
+    let modeWingsuit: String
     let patternSection: String
     let sideLabel: String
     let sideLeft: String
@@ -39,8 +43,13 @@ struct AppStrings {
     let baseGateLabel: String
     let finalGateLabel: String
     let touchdownGateLabel: String
+    let entryGateLabel: String
+    let turnOneGateLabel: String
+    let turnTwoGateLabel: String
+    let deployGateLabel: String
     let shearExponentLabel: String
     let canopySection: String
+    let wingsuitSection: String
     let presetLabel: String
     let canopySizeLabel: String
     let exitWeightLabel: String
@@ -51,6 +60,16 @@ struct AppStrings {
     let airspeedMinLabel: String
     let airspeedMaxLabel: String
     let currentWlSummary: (Double, Double) -> String
+    let wingsuitPresetLabel: String
+    let wingsuitPresetSwift: String
+    let wingsuitPresetAtc: String
+    let wingsuitPresetFreak: String
+    let wingsuitPresetAura: String
+    let wingsuitPresetCustom: String
+    let wingsuitNameLabel: String
+    let flightSpeedLabel: String
+    let fallRateLabel: String
+    let currentWingsuitSummary: (Double, Double, Double) -> String
     let windLayersSection: String
     let windAltLabel: String
     let windSpeedLabel: String
@@ -58,7 +77,9 @@ struct AppStrings {
     let outputsSection: String
     let wingLoadingLabel: String
     let estAirspeedLabel: String
+    let estFlightSpeedLabel: String
     let estSinkLabel: String
+    let wingsuitModelSummary: (String) -> String
     let noWarnings: String
     let importExportSection: String
     let exportSnapshotButton: String
@@ -71,6 +92,8 @@ struct AppStrings {
     let statusValid: String
     let windLegendTitle: String
     let loadedWind: (String, Double, Int) -> String
+    let loadedUpperWind: (Int) -> String
+    let loadedUpperWindFallback: (String) -> String
     let autoWindFailed: (String) -> String
     let enterLocationQuery: String
     let locationSet: (String) -> String
@@ -88,14 +111,18 @@ struct AppStrings {
         languageSection: "Language",
         languageEnglish: "English",
         languageChinese: "中文",
-        title: "Landing Pattern (iOS V1)",
+        title: "Flight Pattern Simulator (iOS V1)",
         locationSection: "Location",
         searchPlaceholder: "Search place or address",
         searchButton: "Search",
         fetchWindButton: "Fetch Wind",
+        fetchWingsuitWindButton: "Fetch Upper Winds",
         headwindFinalButton: "Headwind Final",
         touchdownLabel: "Touchdown",
         selectedResult: "selected result",
+        modeSection: "Flight Mode",
+        modeCanopy: "Canopy",
+        modeWingsuit: "Wingsuit",
         patternSection: "Pattern",
         sideLabel: "Side",
         sideLeft: "Left",
@@ -106,8 +133,13 @@ struct AppStrings {
         baseGateLabel: "Base Gate (ft)",
         finalGateLabel: "Final Gate (ft)",
         touchdownGateLabel: "Touchdown Gate (ft)",
+        entryGateLabel: "Exit Gate (ft)",
+        turnOneGateLabel: "Turn 1 Gate (ft)",
+        turnTwoGateLabel: "Turn 2 Gate (ft)",
+        deployGateLabel: "Deploy Gate (ft)",
         shearExponentLabel: "Shear Exponent",
         canopySection: "Canopy + Jumper",
+        wingsuitSection: "Wingsuit",
         presetLabel: "Preset",
         canopySizeLabel: "Canopy Size (sqft)",
         exitWeightLabel: "Exit Weight (lb)",
@@ -120,6 +152,18 @@ struct AppStrings {
         currentWlSummary: { wl, speed in
             String(format: "Current WL %.2f -> Modeled Airspeed %.1f kt", wl, speed)
         },
+        wingsuitPresetLabel: "Wingsuit Preset",
+        wingsuitPresetSwift: "SWIFT",
+        wingsuitPresetAtc: "ATC",
+        wingsuitPresetFreak: "FREAK",
+        wingsuitPresetAura: "AURA",
+        wingsuitPresetCustom: "Custom",
+        wingsuitNameLabel: "Wingsuit Name",
+        flightSpeedLabel: "Horizontal Speed (kt)",
+        fallRateLabel: "Fall Rate (ft/s)",
+        currentWingsuitSummary: { speed, fallRate, glideRatio in
+            String(format: "Horizontal %.1f kt, Vertical %.1f ft/s, Approx GR %.2f", speed, fallRate, glideRatio)
+        },
         windLayersSection: "Wind Layers",
         windAltLabel: "Alt (ft)",
         windSpeedLabel: "Speed (kt)",
@@ -127,7 +171,9 @@ struct AppStrings {
         outputsSection: "Outputs",
         wingLoadingLabel: "Wing Loading",
         estAirspeedLabel: "Est. Airspeed",
+        estFlightSpeedLabel: "Horizontal Speed",
         estSinkLabel: "Est. Sink",
+        wingsuitModelSummary: { name in "Wingsuit profile: \(name)" },
         noWarnings: "No active warnings.",
         importExportSection: "Import / Export",
         exportSnapshotButton: "Export Snapshot JSON",
@@ -142,6 +188,8 @@ struct AppStrings {
         loadedWind: { source, speed, direction in
             "Loaded \(source) wind (\(String(format: "%.1f", speed)) kt from \(direction) deg)."
         },
+        loadedUpperWind: { count in "Loaded upper-air winds for \(count) active start altitude\(count == 1 ? "" : "s")." },
+        loadedUpperWindFallback: { error in "Upper-air wind fetch failed. Fell back to extrapolated surface winds. \(error)" },
         autoWindFailed: { error in
             "Auto wind failed. Use manual values. \(error)"
         },
@@ -162,14 +210,18 @@ struct AppStrings {
         languageSection: "语言",
         languageEnglish: "English",
         languageChinese: "中文",
-        title: "着陆航线模拟器 (iOS V1)",
+        title: "飞行航线模拟器 (iOS V1)",
         locationSection: "位置",
         searchPlaceholder: "搜索地点或地址",
         searchButton: "搜索",
         fetchWindButton: "获取风数据",
+        fetchWingsuitWindButton: "获取高空风",
         headwindFinalButton: "迎风第三边",
         touchdownLabel: "着陆点",
         selectedResult: "已选结果",
+        modeSection: "飞行模式",
+        modeCanopy: "伞翼",
+        modeWingsuit: "翼装",
         patternSection: "航线",
         sideLabel: "方向",
         sideLeft: "左",
@@ -180,8 +232,13 @@ struct AppStrings {
         baseGateLabel: "第二边高度 (ft)",
         finalGateLabel: "第三边高度 (ft)",
         touchdownGateLabel: "接地点高度 (ft)",
+        entryGateLabel: "出舱高度 (ft)",
+        turnOneGateLabel: "第一转弯高度 (ft)",
+        turnTwoGateLabel: "第二转弯高度 (ft)",
+        deployGateLabel: "开伞高度 (ft)",
         shearExponentLabel: "风切变指数",
         canopySection: "伞翼与跳伞员",
+        wingsuitSection: "翼装",
         presetLabel: "预设",
         canopySizeLabel: "伞翼面积 (sqft)",
         exitWeightLabel: "出舱重量 (lb)",
@@ -194,6 +251,18 @@ struct AppStrings {
         currentWlSummary: { wl, speed in
             String(format: "当前翼载 %.2f -> 模型空速 %.1f kt", wl, speed)
         },
+        wingsuitPresetLabel: "翼装预设",
+        wingsuitPresetSwift: "SWIFT",
+        wingsuitPresetAtc: "ATC",
+        wingsuitPresetFreak: "FREAK",
+        wingsuitPresetAura: "AURA",
+        wingsuitPresetCustom: "自定义",
+        wingsuitNameLabel: "翼装名称",
+        flightSpeedLabel: "水平速度 (kt)",
+        fallRateLabel: "下沉率 (ft/s)",
+        currentWingsuitSummary: { speed, fallRate, glideRatio in
+            String(format: "水平速度 %.1f kt，垂直速度 %.1f ft/s，约滑翔比 %.2f", speed, fallRate, glideRatio)
+        },
         windLayersSection: "分层风",
         windAltLabel: "高度 (ft)",
         windSpeedLabel: "速度 (kt)",
@@ -201,7 +270,9 @@ struct AppStrings {
         outputsSection: "输出",
         wingLoadingLabel: "翼载",
         estAirspeedLabel: "估算空速",
+        estFlightSpeedLabel: "水平速度",
         estSinkLabel: "估算下沉",
+        wingsuitModelSummary: { name in "翼装配置：\(name)" },
         noWarnings: "当前无警告。",
         importExportSection: "导入 / 导出",
         exportSnapshotButton: "导出快照 JSON",
@@ -216,6 +287,8 @@ struct AppStrings {
         loadedWind: { source, speed, direction in
             "已加载 \(source) 风数据（\(String(format: "%.1f", speed)) kt，来向 \(direction) 度）。"
         },
+        loadedUpperWind: { count in "已加载 \(count) 个有效起始高度的高空风。" },
+        loadedUpperWindFallback: { error in "高空风获取失败，已回退为地表风外推。\(error)" },
         autoWindFailed: { error in
             "自动获取风失败，请使用手动输入。\(error)"
         },

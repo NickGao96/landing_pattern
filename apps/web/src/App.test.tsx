@@ -18,27 +18,44 @@ beforeEach(async () => {
   useAppStore.setState({
     language: "en",
     unitSystem: "imperial",
+    mode: "canopy",
     location: { lat: 37.4419, lng: -122.143, source: "default" },
     touchdown: { lat: 37.4419, lng: -122.143 },
     landingHeadingDeg: 180,
     side: "left",
     baseLegDrift: true,
-    gatesFt: [900, 600, 300, 0],
     shearAlpha: 0.14,
-    canopy: {
-      manufacturer: "Performance Designs",
-      model: "Sabre3 170",
-      sizeSqft: 170,
-      wlRef: 1,
-      airspeedRefKt: 20,
-      glideRatio: 2.7,
+    canopySettings: {
+      gatesFt: [900, 600, 300, 0],
+      canopy: {
+        manufacturer: "Performance Designs",
+        model: "Sabre3 170",
+        sizeSqft: 170,
+        wlRef: 1,
+        airspeedRefKt: 20,
+        glideRatio: 2.7,
+      },
+      exitWeightLb: 170,
+      windLayers: [
+        { altitudeFt: 900, speedKt: 10, dirFromDeg: 180, source: "manual" },
+        { altitudeFt: 600, speedKt: 9, dirFromDeg: 180, source: "manual" },
+        { altitudeFt: 300, speedKt: 8, dirFromDeg: 180, source: "manual" },
+      ],
     },
-    exitWeightLb: 170,
-    windLayers: [
-      { altitudeFt: 900, speedKt: 10, dirFromDeg: 180, source: "manual" },
-      { altitudeFt: 600, speedKt: 9, dirFromDeg: 180, source: "manual" },
-      { altitudeFt: 300, speedKt: 8, dirFromDeg: 180, source: "manual" },
-    ],
+    wingsuitSettings: {
+      gatesFt: [12000, 10000, 6500, 4000],
+      wingsuit: {
+        presetId: "freak",
+        name: "Squirrel FREAK",
+        flightSpeedKt: 84,
+        fallRateFps: 68,
+      },
+      windLayers: [
+        { altitudeFt: 12000, speedKt: 28, dirFromDeg: 240, source: "manual" },
+        { altitudeFt: 10000, speedKt: 24, dirFromDeg: 230, source: "manual" },
+        { altitudeFt: 6500, speedKt: 18, dirFromDeg: 220, source: "manual" },
+      ],
+    },
     namedSpots: [],
     selectedSpotId: null,
   });
@@ -106,6 +123,7 @@ describe("App", () => {
     const snapshot = new File(
       [
         JSON.stringify({
+          mode: "canopy",
           location: { lat: 47.12345, lng: -122.98765, source: "manual" },
         }),
       ],
@@ -125,6 +143,80 @@ describe("App", () => {
     const lngInputs = screen.getAllByLabelText("Lng") as HTMLInputElement[];
     expect(latInputs[0]?.value).toBe("47.12345");
     expect(lngInputs[0]?.value).toBe("-122.98765");
+  });
+
+  it("preserves separate canopy and wingsuit state when switching modes", async () => {
+    renderApp();
+
+    fireEvent.click(screen.getByLabelText("Wingsuit"));
+    fireEvent.change(screen.getByLabelText("Horizontal Speed (kt)"), { target: { value: "72" } });
+    fireEvent.click(screen.getByLabelText("Canopy"));
+
+    expect(screen.getByLabelText("Exit Weight (lb)")).toHaveValue(170);
+
+    fireEvent.click(screen.getByLabelText("Wingsuit"));
+    expect(screen.getByLabelText("Horizontal Speed (kt)")).toHaveValue(72);
+  });
+
+  it("fills realistic values when wingsuit presets change", () => {
+    renderApp();
+
+    fireEvent.click(screen.getByLabelText("Wingsuit"));
+    fireEvent.change(screen.getByLabelText("Wingsuit Preset"), { target: { value: "atc" } });
+
+    expect(screen.getByLabelText("Horizontal Speed (kt)")).toHaveValue(68);
+    expect(screen.getByLabelText("Fall Rate (ft/s)")).toHaveValue(72);
+    expect(screen.getByLabelText("Wingsuit Name")).toHaveValue("Squirrel ATC");
+
+    fireEvent.change(screen.getByLabelText("Wingsuit Preset"), { target: { value: "aura" } });
+
+    expect(screen.getByLabelText("Horizontal Speed (kt)")).toHaveValue(80);
+    expect(screen.getByLabelText("Fall Rate (ft/s)")).toHaveValue(60);
+    expect(screen.getByLabelText("Wingsuit Name")).toHaveValue("Squirrel AURA");
+
+    fireEvent.change(screen.getByLabelText("Wingsuit Preset"), { target: { value: "swift" } });
+
+    expect(screen.getByLabelText("Horizontal Speed (kt)")).toHaveValue(60);
+    expect(screen.getByLabelText("Fall Rate (ft/s)")).toHaveValue(84);
+    expect(screen.getByLabelText("Wingsuit Name")).toHaveValue("Squirrel SWIFT");
+  });
+
+  it("imports legacy canopy snapshots into canopy mode", async () => {
+    const { container } = renderApp();
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    const snapshot = new File(
+      [
+        JSON.stringify({
+          gatesFt: [1200, 800, 400, 0],
+          canopy: {
+            manufacturer: "Performance Designs",
+            model: "Sabre3 170",
+            sizeSqft: 170,
+            wlRef: 1,
+            airspeedRefKt: 20,
+            glideRatio: 2.7,
+          },
+          exitWeightLb: 190,
+          windLayers: [
+            { altitudeFt: 1200, speedKt: 11, dirFromDeg: 180, source: "manual" },
+            { altitudeFt: 800, speedKt: 10, dirFromDeg: 180, source: "manual" },
+            { altitudeFt: 400, speedKt: 9, dirFromDeg: 180, source: "manual" },
+          ],
+        }),
+      ],
+      "legacy.json",
+      { type: "application/json" },
+    );
+
+    fireEvent.change(fileInput, { target: { files: [snapshot] } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Snapshot imported.")).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText("Canopy")).toBeChecked();
+    expect(screen.getByLabelText("Exit Weight (lb)")).toHaveValue(190);
   });
 
   it("updates only the targeted wind row when altitudes duplicate", () => {
@@ -152,6 +244,6 @@ describe("App", () => {
 
     expect(screen.getByText("语言")).toBeInTheDocument();
     expect(screen.getByLabelText("出舱重量 (lb)")).toBeInTheDocument();
-    expect(screen.getByText("着陆航线模拟器")).toBeInTheDocument();
+    expect(screen.getByText("飞行航线模拟器")).toBeInTheDocument();
   });
 });

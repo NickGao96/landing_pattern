@@ -28,7 +28,7 @@ struct ContentView: View {
                     .background(Color(uiColor: .secondarySystemBackground))
                 }
 
-                WindLegendView(title: t.windLegendTitle, windLayers: store.windLayers)
+                WindLegendView(title: t.windLegendTitle, windLayers: store.activeWindLayers)
                     .padding(.top, 12)
                     .padding(.trailing, 12)
             }
@@ -76,7 +76,7 @@ struct ContentView: View {
                         hasWarnings: !output.warnings.isEmpty,
                         landingHeadingDeg: store.landingHeadingDeg,
                         basemapStyle: basemapStyle,
-                        windLayers: store.windLayers,
+                        windLayers: store.activeWindLayers,
                         onTouchdownChange: { coordinate in
                             store.setTouchdown(coordinate)
                         },
@@ -92,7 +92,7 @@ struct ContentView: View {
                         hasWarnings: !output.warnings.isEmpty,
                         landingHeadingDeg: store.landingHeadingDeg,
                         basemapStyle: basemapStyle,
-                        windLayers: store.windLayers,
+                        windLayers: store.activeWindLayers,
                         onTouchdownChange: { coordinate in
                             store.setTouchdown(coordinate)
                         },
@@ -128,9 +128,14 @@ struct ContentView: View {
                 .font(.title3.weight(.bold))
 
             languageSection
+            modeSection
             locationSection
             patternSection
-            canopySection
+            if store.mode == .canopy {
+                canopySection
+            } else {
+                wingsuitSection
+            }
             windSection
             outputSection
             ioSection
@@ -144,6 +149,17 @@ struct ContentView: View {
             Picker(t.languageSection, selection: $store.language) {
                 Text(t.languageEnglish).tag(AppLanguage.en)
                 Text(t.languageChinese).tag(AppLanguage.zh)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var modeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: t.modeSection)
+            Picker(t.modeSection, selection: $store.mode) {
+                Text(t.modeCanopy).tag(FlightMode.canopy)
+                Text(t.modeWingsuit).tag(FlightMode.wingsuit)
             }
             .pickerStyle(.segmented)
         }
@@ -181,7 +197,7 @@ struct ContentView: View {
             }
 
             HStack(spacing: 8) {
-                Button(t.fetchWindButton) {
+                Button(store.mode == .canopy ? t.fetchWindButton : t.fetchWingsuitWindButton) {
                     Task { await store.fetchAutoWind() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -215,12 +231,12 @@ struct ContentView: View {
             NumericInput(title: t.landingHeadingLabel, value: $store.landingHeadingDeg, precision: 1)
 
             HStack(spacing: 10) {
-                NumericInput(title: t.downwindGateLabel, value: gateBinding(0), precision: 0)
-                NumericInput(title: t.baseGateLabel, value: gateBinding(1), precision: 0)
+                NumericInput(title: gateLabel(for: 0), value: gateBinding(0), precision: 0)
+                NumericInput(title: gateLabel(for: 1), value: gateBinding(1), precision: 0)
             }
             HStack(spacing: 10) {
-                NumericInput(title: t.finalGateLabel, value: gateBinding(2), precision: 0)
-                NumericInput(title: t.touchdownGateLabel, value: gateBinding(3), precision: 0)
+                NumericInput(title: gateLabel(for: 2), value: gateBinding(2), precision: 0)
+                NumericInput(title: gateLabel(for: 3), value: gateBinding(3), precision: 0)
             }
             NumericInput(title: t.shearExponentLabel, value: $store.shearAlpha, precision: 2)
         }
@@ -259,7 +275,50 @@ struct ContentView: View {
 
             let wl = store.patternOutput.metrics.wingLoading
             let speed = store.patternOutput.metrics.estAirspeedKt
-            Text(t.currentWlSummary(wl, speed))
+            Text(t.currentWlSummary(wl ?? 0, speed))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var wingsuitSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: t.wingsuitSection)
+
+            Picker(
+                t.wingsuitPresetLabel,
+                selection: Binding(
+                    get: { store.wingsuit.presetId ?? inferWingsuitPresetId(from: store.wingsuit) },
+                    set: { store.applyWingsuitPreset($0) }
+                )
+            ) {
+                Text(t.wingsuitPresetSwift).tag(WingsuitPresetId.swift)
+                Text(t.wingsuitPresetAtc).tag(WingsuitPresetId.atc)
+                Text(t.wingsuitPresetFreak).tag(WingsuitPresetId.freak)
+                Text(t.wingsuitPresetAura).tag(WingsuitPresetId.aura)
+                Text(t.wingsuitPresetCustom).tag(WingsuitPresetId.custom)
+            }
+
+            HStack(spacing: 10) {
+                TextField(t.wingsuitNameLabel, text: Binding(
+                    get: { store.wingsuit.name },
+                    set: {
+                        var next = store.wingsuit
+                        next.name = $0
+                        next.presetId = .custom
+                        store.wingsuit = next
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+
+                NumericInput(title: t.flightSpeedLabel, value: wingsuitBinding(\.flightSpeedKt), precision: 1)
+            }
+
+            HStack(spacing: 10) {
+                NumericInput(title: t.fallRateLabel, value: wingsuitBinding(\.fallRateFps), precision: 1)
+            }
+
+            Text(t.currentWingsuitSummary(store.wingsuit.flightSpeedKt, store.wingsuit.fallRateFps, approximateWingsuitGlideRatio(store.wingsuit)))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -268,14 +327,14 @@ struct ContentView: View {
     private var windSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.windLayersSection)
-            ForEach(Array(store.windLayers.enumerated()), id: \.offset) { index, layer in
+            ForEach(Array(store.activeWindLayers.enumerated()), id: \.offset) { index, _ in
                 HStack(spacing: 8) {
                     NumericInput(
                         title: t.windAltLabel,
                         value: Binding(
-                            get: { store.windLayers[index].altitudeFt },
+                            get: { store.activeWindLayers[index].altitudeFt },
                             set: { newValue in
-                                store.updateWindLayer(index: index) { $0.altitudeFt = newValue }
+                                store.updateActiveWindLayer(index: index) { $0.altitudeFt = newValue }
                             }
                         ),
                         precision: 0
@@ -283,9 +342,9 @@ struct ContentView: View {
                     NumericInput(
                         title: t.windSpeedLabel,
                         value: Binding(
-                            get: { store.windLayers[index].speedKt },
+                            get: { store.activeWindLayers[index].speedKt },
                             set: { newValue in
-                                store.updateWindLayer(index: index) { $0.speedKt = max(0, newValue) }
+                                store.updateActiveWindLayer(index: index) { $0.speedKt = max(0, newValue) }
                             }
                         ),
                         precision: 1
@@ -293,9 +352,9 @@ struct ContentView: View {
                     NumericInput(
                         title: t.windFromLabel,
                         value: Binding(
-                            get: { store.windLayers[index].dirFromDeg },
+                            get: { store.activeWindLayers[index].dirFromDeg },
                             set: { newValue in
-                                store.updateWindLayer(index: index) { $0.dirFromDeg = normalizeHeading(newValue) }
+                                store.updateActiveWindLayer(index: index) { $0.dirFromDeg = normalizeHeading(newValue) }
                             }
                         ),
                         precision: 0
@@ -316,9 +375,20 @@ struct ContentView: View {
         let output = store.patternOutput
         return VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: t.outputsSection)
-            Text(String(format: "\(t.wingLoadingLabel): %.2f", output.metrics.wingLoading))
-            Text(String(format: "\(t.estAirspeedLabel): %.1f kt", output.metrics.estAirspeedKt))
+            if store.mode == .canopy {
+                Text(String(format: "\(t.wingLoadingLabel): %.2f", output.metrics.wingLoading ?? 0))
+            }
+            Text(
+                String(
+                    format: "\(store.mode == .canopy ? t.estAirspeedLabel : t.estFlightSpeedLabel): %.1f kt",
+                    output.metrics.estAirspeedKt
+                )
+            )
             Text(String(format: "\(t.estSinkLabel): %.2f ft/s", output.metrics.estSinkFps))
+            if store.mode == .wingsuit {
+                Text(t.wingsuitModelSummary(store.wingsuit.name))
+                    .foregroundStyle(.secondary)
+            }
 
             if output.warnings.isEmpty {
                 Text(t.noWarnings)
@@ -394,12 +464,27 @@ struct ContentView: View {
 
     private func gateBinding(_ index: Int) -> Binding<Double> {
         Binding(
-            get: { store.gatesFt.indices.contains(index) ? store.gatesFt[index] : 0 },
-            set: { newValue in
-                guard store.gatesFt.indices.contains(index) else { return }
-                store.gatesFt[index] = newValue
-            }
+            get: { store.activeGatesFt.indices.contains(index) ? store.activeGatesFt[index] : 0 },
+            set: { newValue in store.updateActiveGate(index: index, value: newValue) }
         )
+    }
+
+    private func gateLabel(for index: Int) -> String {
+        if store.mode == .canopy {
+            switch index {
+            case 0: return t.downwindGateLabel
+            case 1: return t.baseGateLabel
+            case 2: return t.finalGateLabel
+            default: return t.touchdownGateLabel
+            }
+        }
+
+        switch index {
+        case 0: return t.entryGateLabel
+        case 1: return t.turnOneGateLabel
+        case 2: return t.turnTwoGateLabel
+        default: return t.deployGateLabel
+        }
     }
 
     private func canopyBinding(_ keyPath: WritableKeyPath<CanopyProfile, Double>) -> Binding<Double> {
@@ -416,6 +501,18 @@ struct ContentView: View {
             get: { store.canopy[keyPath: keyPath] ?? defaultValue },
             set: { newValue in
                 store.canopy[keyPath: keyPath] = newValue
+            }
+        )
+    }
+
+    private func wingsuitBinding(_ keyPath: WritableKeyPath<WingsuitProfile, Double>) -> Binding<Double> {
+        Binding(
+            get: { store.wingsuit[keyPath: keyPath] },
+            set: { newValue in
+                var next = store.wingsuit
+                next[keyPath: keyPath] = newValue
+                next.presetId = .custom
+                store.wingsuit = next
             }
         )
     }

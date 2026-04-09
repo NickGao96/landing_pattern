@@ -28,7 +28,7 @@ final class EngineParityTests: XCTestCase {
         let data = try Data(contentsOf: fixtureURL)
         let fixtureFile = try JSONDecoder().decode(EngineFixtureFile.self, from: data)
 
-        XCTAssertEqual(fixtureFile.schemaVersion, 1)
+        XCTAssertEqual(fixtureFile.schemaVersion, 2)
 
         for fixture in fixtureFile.cases {
             let validation = validatePatternInput(fixture.input)
@@ -64,7 +64,11 @@ final class EngineParityTests: XCTestCase {
                 XCTAssertLessThanOrEqual(abs(actualSegment.timeSec - expectedSegment.timeSec) / expectedTime, fixtureFile.tolerance.timePct)
             }
 
-            XCTAssertEqual(output.metrics.wingLoading, fixture.output.metrics.wingLoading, accuracy: 1e-6)
+            if let expectedWingLoading = fixture.output.metrics.wingLoading {
+                XCTAssertEqual(output.metrics.wingLoading ?? 0, expectedWingLoading, accuracy: 1e-6)
+            } else {
+                XCTAssertNil(output.metrics.wingLoading)
+            }
             XCTAssertEqual(output.metrics.estAirspeedKt, fixture.output.metrics.estAirspeedKt, accuracy: fixtureFile.tolerance.speedKt)
             XCTAssertEqual(output.metrics.estSinkFps, fixture.output.metrics.estSinkFps, accuracy: 1e-3)
         }

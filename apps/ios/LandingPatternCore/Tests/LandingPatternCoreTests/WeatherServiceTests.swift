@@ -73,4 +73,24 @@ final class WeatherServiceTests: XCTestCase {
         XCTAssertGreaterThan(profile[0].speedKt, profile[2].speedKt)
         XCTAssertEqual(profile[0].dirFromDeg, 270, accuracy: 1e-6)
     }
+
+    func testFetchWingsuitWindProfileMapsNearestLevels() async throws {
+        let client = MockHTTPClient { url in
+            XCTAssertTrue(url.absoluteString.contains("api.open-meteo.com"))
+            return Data(
+                #"{"elevation":100,"current":{"wind_speed_10m":12,"wind_direction_10m":200},"hourly":{"wind_speed_1000hPa":[20],"wind_direction_1000hPa":[220],"geopotential_height_1000hPa":[250],"wind_speed_925hPa":[35],"wind_direction_925hPa":[260],"geopotential_height_925hPa":[1100]}}"#.utf8
+            )
+        }
+
+        let service = WeatherService(httpClient: client)
+        let profile = try await service.fetchWingsuitWindProfile(lat: 37, lng: -122, altitudesFt: [200, 3200])
+
+        XCTAssertEqual(profile.count, 2)
+        XCTAssertEqual(profile[0].altitudeFt, 200, accuracy: 1e-6)
+        XCTAssertEqual(profile[0].speedKt, 12, accuracy: 1e-6)
+        XCTAssertEqual(profile[0].dirFromDeg, 200, accuracy: 1e-6)
+        XCTAssertEqual(profile[1].altitudeFt, 3200, accuracy: 1e-6)
+        XCTAssertEqual(profile[1].speedKt, 35, accuracy: 1e-6)
+        XCTAssertEqual(profile[1].dirFromDeg, 260, accuracy: 1e-6)
+    }
 }
