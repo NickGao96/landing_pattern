@@ -6,6 +6,9 @@ import LandingPatternCore
 
 @MainActor
 final class LandingStore: ObservableObject {
+    @Published var mode: FlightMode = .canopy {
+        didSet { persistSettings() }
+    }
     @Published var touchdown = CLLocationCoordinate2D(latitude: 37.4419, longitude: -122.143) {
         didSet { persistSettings() }
     }
@@ -21,10 +24,10 @@ final class LandingStore: ObservableObject {
     @Published var baseLegDrift: Bool = true {
         didSet { persistSettings() }
     }
-    @Published var gatesFt: [Double] = [900, 600, 300, 0] {
+    @Published var shearAlpha: Double = 0.14 {
         didSet { persistSettings() }
     }
-    @Published var shearAlpha: Double = 0.14 {
+    @Published var canopyGatesFt: [Double] = [900, 600, 300, 0] {
         didSet { persistSettings() }
     }
     @Published var canopy: CanopyProfile = canopyPresets.first ?? CanopyProfile(
@@ -43,11 +46,20 @@ final class LandingStore: ObservableObject {
     @Published var exitWeightLb: Double = 170 {
         didSet { persistSettings() }
     }
-    @Published var windLayers: [WindLayer] = [
+    @Published var canopyWindLayers: [WindLayer] = [
         WindLayer(altitudeFt: 900, speedKt: 10, dirFromDeg: 180, source: .manual),
         WindLayer(altitudeFt: 600, speedKt: 9, dirFromDeg: 180, source: .manual),
         WindLayer(altitudeFt: 300, speedKt: 8, dirFromDeg: 180, source: .manual),
     ] {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitGatesFt: [Double] = defaultWingsuitGatesFt {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuit: WingsuitProfile = wingsuitProfile(for: .freak) {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitWindLayers: [WindLayer] = defaultWingsuitWindLayers {
         didSet { persistSettings() }
     }
     @Published var language: AppLanguage = .en {
@@ -62,9 +74,7 @@ final class LandingStore: ObservableObject {
     @Published var locationQuery = ""
     @Published var searchResults: [MKMapItem] = []
     @Published var mapStackChoice: MapStackChoice = .mapKit {
-        didSet {
-            persistSettings()
-        }
+        didSet { persistSettings() }
     }
 
     @AppStorage("landing-pattern-settings") private var settingsData: Data = Data()
@@ -78,17 +88,27 @@ final class LandingStore: ObservableObject {
         restoreSettings()
     }
 
+    var activeGatesFt: [Double] {
+        mode == .canopy ? canopyGatesFt : wingsuitGatesFt
+    }
+
+    var activeWindLayers: [WindLayer] {
+        mode == .canopy ? canopyWindLayers : wingsuitWindLayers
+    }
+
     var patternInput: PatternInput {
         PatternInput(
+            mode: mode,
             touchdownLat: touchdown.latitude,
             touchdownLng: touchdown.longitude,
             landingHeadingDeg: landingHeadingDeg,
             side: side,
             baseLegDrift: baseLegDrift,
-            gatesFt: gatesFt,
-            winds: windLayers,
+            gatesFt: activeGatesFt,
+            winds: activeWindLayers,
             canopy: canopy,
-            jumper: JumperInput(exitWeightLb: exitWeightLb, canopyAreaSqft: canopy.sizeSqft)
+            jumper: JumperInput(exitWeightLb: exitWeightLb, canopyAreaSqft: canopy.sizeSqft),
+            wingsuit: wingsuit
         )
     }
 
@@ -106,9 +126,24 @@ final class LandingStore: ObservableObject {
         landingHeadingDeg = heading
     }
 
-    func updateWindLayer(index: Int, patch: (inout WindLayer) -> Void) {
-        guard windLayers.indices.contains(index) else { return }
-        patch(&windLayers[index])
+    func updateActiveWindLayer(index: Int, patch: (inout WindLayer) -> Void) {
+        if mode == .canopy {
+            guard canopyWindLayers.indices.contains(index) else { return }
+            patch(&canopyWindLayers[index])
+        } else {
+            guard wingsuitWindLayers.indices.contains(index) else { return }
+            patch(&wingsuitWindLayers[index])
+        }
+    }
+
+    func updateActiveGate(index: Int, value: Double) {
+        if mode == .canopy {
+            guard canopyGatesFt.indices.contains(index) else { return }
+            canopyGatesFt[index] = value
+        } else {
+            guard wingsuitGatesFt.indices.contains(index) else { return }
+            wingsuitGatesFt[index] = value
+        }
     }
 
     func applyPreset(model: String) {
@@ -116,17 +151,52 @@ final class LandingStore: ObservableObject {
         canopy = preset
     }
 
+    func applyWingsuitPreset(_ presetId: WingsuitPresetId) {
+        if presetId == .custom {
+            var next = wingsuit
+            next.presetId = .custom
+            wingsuit = next
+            return
+        }
+        wingsuit = wingsuitProfile(for: presetId)
+    }
+
     func fetchAutoWind() async {
+        if mode == .canopy {
+            do {
+                let surface = try await weatherService.fetchSurfaceWind(lat: touchdown.latitude, lng: touchdown.longitude)
+                canopyWindLayers = weatherService.extrapolateWindProfile(
+                    surface: surface,
+                    altitudesFt: Array(canopyGatesFt.prefix(3)),
+                    alpha: shearAlpha
+                )
+                statusMessage = t.loadedWind(surface.source.rawValue, surface.speedKt, Int(round(surface.dirFromDeg)))
+            } catch {
+                statusMessage = t.autoWindFailed(error.localizedDescription)
+            }
+            return
+        }
+
+        let requestedAltitudes = requestedWindAltitudes(for: wingsuitGatesFt)
         do {
-            let surface = try await weatherService.fetchSurfaceWind(lat: touchdown.latitude, lng: touchdown.longitude)
-            windLayers = weatherService.extrapolateWindProfile(
-                surface: surface,
-                altitudesFt: Array(gatesFt.prefix(3)),
-                alpha: shearAlpha
+            wingsuitWindLayers = try await weatherService.fetchWingsuitWindProfile(
+                lat: touchdown.latitude,
+                lng: touchdown.longitude,
+                altitudesFt: requestedAltitudes
             )
-            statusMessage = t.loadedWind(surface.source.rawValue, surface.speedKt, Int(round(surface.dirFromDeg)))
+            statusMessage = t.loadedUpperWind(wingsuitWindLayers.count)
         } catch {
-            statusMessage = t.autoWindFailed(error.localizedDescription)
+            do {
+                let surface = try await weatherService.fetchSurfaceWind(lat: touchdown.latitude, lng: touchdown.longitude)
+                wingsuitWindLayers = weatherService.extrapolateWindProfile(
+                    surface: surface,
+                    altitudesFt: requestedAltitudes,
+                    alpha: shearAlpha
+                )
+                statusMessage = t.loadedUpperWindFallback(error.localizedDescription)
+            } catch {
+                statusMessage = t.autoWindFailed(error.localizedDescription)
+            }
         }
     }
 
@@ -220,7 +290,7 @@ final class LandingStore: ObservableObject {
     }
 
     func suggestHeadwindFinal() {
-        guard let lowLayer = windLayers.sorted(by: { $0.altitudeFt < $1.altitudeFt }).first else {
+        guard let lowLayer = activeWindLayers.sorted(by: { $0.altitudeFt < $1.altitudeFt }).first else {
             statusMessage = t.noWindLayerForSuggestion
             return
         }
@@ -229,81 +299,100 @@ final class LandingStore: ObservableObject {
     }
 
     func exportSnapshot() throws -> Data {
-        let snapshot = Snapshot(
-            locationLat: location.latitude,
-            locationLng: location.longitude,
-            touchdownLat: touchdown.latitude,
-            touchdownLng: touchdown.longitude,
-            landingHeadingDeg: landingHeadingDeg,
-            side: side,
-            baseLegDrift: baseLegDrift,
-            gatesFt: gatesFt,
-            shearAlpha: shearAlpha,
-            canopy: canopy,
-            exitWeightLb: exitWeightLb,
-            windLayers: windLayers,
-            mapStackChoice: mapStackChoice,
-            language: language
-        )
+        let snapshot = makeSnapshot()
         return try JSONEncoder().encode(snapshot)
     }
 
     func importSnapshot(from data: Data) throws {
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
-        location = CLLocationCoordinate2D(latitude: snapshot.locationLat, longitude: snapshot.locationLng)
-        touchdown = CLLocationCoordinate2D(latitude: snapshot.touchdownLat, longitude: snapshot.touchdownLng)
-        landingHeadingDeg = snapshot.landingHeadingDeg
-        side = snapshot.side
-        baseLegDrift = snapshot.baseLegDrift
-        gatesFt = snapshot.gatesFt
-        shearAlpha = snapshot.shearAlpha
-        canopy = snapshot.canopy
-        exitWeightLb = snapshot.exitWeightLb
-        windLayers = snapshot.windLayers
-        mapStackChoice = snapshot.mapStackChoice ?? .mapKit
-        language = snapshot.language ?? .en
+        applySnapshot(snapshot)
         statusMessage = t.snapshotImported
     }
 
     private func persistSettings() {
         guard !isRestoringSettings else { return }
-        let snapshot = Snapshot(
-            locationLat: location.latitude,
-            locationLng: location.longitude,
-            touchdownLat: touchdown.latitude,
-            touchdownLng: touchdown.longitude,
-            landingHeadingDeg: landingHeadingDeg,
-            side: side,
-            baseLegDrift: baseLegDrift,
-            gatesFt: gatesFt,
-            shearAlpha: shearAlpha,
-            canopy: canopy,
-            exitWeightLb: exitWeightLb,
-            windLayers: windLayers,
-            mapStackChoice: mapStackChoice,
-            language: language
-        )
-        settingsData = (try? JSONEncoder().encode(snapshot)) ?? Data()
+        settingsData = (try? JSONEncoder().encode(makeSnapshot())) ?? Data()
     }
 
     private func restoreSettings() {
         guard !settingsData.isEmpty else { return }
         guard let snapshot = try? JSONDecoder().decode(Snapshot.self, from: settingsData) else { return }
         isRestoringSettings = true
+        applySnapshot(snapshot)
+        isRestoringSettings = false
+    }
 
+    private func makeSnapshot() -> Snapshot {
+        Snapshot(
+            mode: mode,
+            locationLat: location.latitude,
+            locationLng: location.longitude,
+            touchdownLat: touchdown.latitude,
+            touchdownLng: touchdown.longitude,
+            landingHeadingDeg: landingHeadingDeg,
+            side: side,
+            baseLegDrift: baseLegDrift,
+            shearAlpha: shearAlpha,
+            canopySettings: CanopySettingsSnapshot(
+                gatesFt: canopyGatesFt,
+                canopy: canopy,
+                exitWeightLb: exitWeightLb,
+                windLayers: canopyWindLayers
+            ),
+            wingsuitSettings: WingsuitSettingsSnapshot(
+                gatesFt: wingsuitGatesFt,
+                wingsuit: wingsuit,
+                windLayers: wingsuitWindLayers
+            ),
+            mapStackChoice: mapStackChoice,
+            language: language
+        )
+    }
+
+    private func applySnapshot(_ snapshot: Snapshot) {
         location = CLLocationCoordinate2D(latitude: snapshot.locationLat, longitude: snapshot.locationLng)
         touchdown = CLLocationCoordinate2D(latitude: snapshot.touchdownLat, longitude: snapshot.touchdownLng)
         landingHeadingDeg = snapshot.landingHeadingDeg
         side = snapshot.side
         baseLegDrift = snapshot.baseLegDrift
-        gatesFt = snapshot.gatesFt
         shearAlpha = snapshot.shearAlpha
-        canopy = snapshot.canopy
-        exitWeightLb = snapshot.exitWeightLb
-        windLayers = snapshot.windLayers
+
+        if let canopySettings = snapshot.canopySettings {
+            canopyGatesFt = canopySettings.gatesFt
+            canopy = canopySettings.canopy
+            exitWeightLb = canopySettings.exitWeightLb
+            canopyWindLayers = canopySettings.windLayers
+        } else {
+            canopyGatesFt = snapshot.gatesFt ?? canopyGatesFt
+            canopy = snapshot.canopy ?? canopy
+            exitWeightLb = snapshot.exitWeightLb ?? exitWeightLb
+            canopyWindLayers = snapshot.windLayers ?? canopyWindLayers
+        }
+
+        if let wingsuitSettings = snapshot.wingsuitSettings {
+            wingsuitGatesFt = wingsuitSettings.gatesFt
+            wingsuit = normalizedWingsuitProfile(wingsuitSettings.wingsuit)
+            wingsuitWindLayers = wingsuitSettings.windLayers
+        }
+
+        mode = snapshot.mode ?? .canopy
         mapStackChoice = snapshot.mapStackChoice ?? .mapKit
         language = snapshot.language ?? .en
-        isRestoringSettings = false
+    }
+
+    private func requestedWindAltitudes(for gatesFt: [Double]) -> [Double] {
+        guard gatesFt.count == 4 else { return [] }
+        var altitudes: [Double] = []
+        if gatesFt[0] > gatesFt[1] {
+            altitudes.append(gatesFt[0])
+        }
+        if gatesFt[1] > gatesFt[2] {
+            altitudes.append(gatesFt[1])
+        }
+        if gatesFt[2] > gatesFt[3] {
+            altitudes.append(gatesFt[2])
+        }
+        return altitudes
     }
 
     private func parseCoordinateQuery(_ query: String) -> CLLocationCoordinate2D? {
@@ -426,7 +515,21 @@ private struct OpenMeteoGeocodingResult: Decodable {
     }
 }
 
+private struct CanopySettingsSnapshot: Codable {
+    var gatesFt: [Double]
+    var canopy: CanopyProfile
+    var exitWeightLb: Double
+    var windLayers: [WindLayer]
+}
+
+private struct WingsuitSettingsSnapshot: Codable {
+    var gatesFt: [Double]
+    var wingsuit: WingsuitProfile
+    var windLayers: [WindLayer]
+}
+
 private struct Snapshot: Codable {
+    var mode: FlightMode?
     var locationLat: Double
     var locationLng: Double
     var touchdownLat: Double
@@ -434,11 +537,13 @@ private struct Snapshot: Codable {
     var landingHeadingDeg: Double
     var side: PatternSide
     var baseLegDrift: Bool
-    var gatesFt: [Double]
     var shearAlpha: Double
-    var canopy: CanopyProfile
-    var exitWeightLb: Double
-    var windLayers: [WindLayer]
+    var canopySettings: CanopySettingsSnapshot?
+    var wingsuitSettings: WingsuitSettingsSnapshot?
+    var gatesFt: [Double]?
+    var canopy: CanopyProfile?
+    var exitWeightLb: Double?
+    var windLayers: [WindLayer]?
     var mapStackChoice: MapStackChoice?
     var language: AppLanguage?
 }

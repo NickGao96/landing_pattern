@@ -4,6 +4,7 @@ import { computePattern, normalizeHeading, validatePatternInput, windFromToGroun
 import { getWindForAltitude } from "../src/math";
 
 const baseInput: PatternInput = {
+  mode: "canopy",
   touchdownLat: 37.0,
   touchdownLng: -122.0,
   landingHeadingDeg: 180,
@@ -21,10 +22,31 @@ const baseInput: PatternInput = {
     exitWeightLb: 170,
     canopyAreaSqft: 170,
   },
+  wingsuit: {
+    name: "Generic Wingsuit",
+    flightSpeedKt: 60,
+    fallRateFps: 12,
+  },
   winds: [
     { altitudeFt: 900, speedKt: 5, dirFromDeg: 270, source: "auto" },
     { altitudeFt: 600, speedKt: 5, dirFromDeg: 270, source: "auto" },
     { altitudeFt: 300, speedKt: 5, dirFromDeg: 270, source: "auto" },
+  ],
+};
+
+const wingsuitInput: PatternInput = {
+  ...baseInput,
+  mode: "wingsuit",
+  gatesFt: [3000, 2000, 1000, 0],
+  wingsuit: {
+    name: "Swift",
+    flightSpeedKt: 60,
+    fallRateFps: 12,
+  },
+  winds: [
+    { altitudeFt: 3000, speedKt: 22, dirFromDeg: 240, source: "auto" },
+    { altitudeFt: 2000, speedKt: 18, dirFromDeg: 230, source: "auto" },
+    { altitudeFt: 1000, speedKt: 14, dirFromDeg: 220, source: "auto" },
   ],
 };
 
@@ -168,5 +190,61 @@ describe("computePattern", () => {
     expect(output.blocked).toBe(true);
     expect(output.warnings.some((warning) => warning.includes("Wing loading"))).toBe(true);
     expect(output.segments).toHaveLength(0);
+  });
+
+  it("computes a nominal wingsuit pattern without wing-loading metrics", () => {
+    const output = computePattern(wingsuitInput);
+
+    expect(output.blocked).toBe(false);
+    expect(output.segments).toHaveLength(3);
+    expect(output.waypoints).toHaveLength(4);
+    expect(output.metrics.wingLoading).toBeNull();
+    expect(output.metrics.estAirspeedKt).toBe(60);
+    expect(output.metrics.estSinkFps).toBe(12);
+  });
+
+  it("supports collapsing the first wingsuit leg", () => {
+    const output = computePattern({
+      ...wingsuitInput,
+      gatesFt: [3000, 3000, 1000, 0],
+      winds: [
+        { altitudeFt: 3000, speedKt: 22, dirFromDeg: 240, source: "auto" },
+        { altitudeFt: 1000, speedKt: 14, dirFromDeg: 220, source: "auto" },
+      ],
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.segments.map((segment) => segment.name)).toEqual(["base", "final"]);
+    expect(output.waypoints.map((waypoint) => waypoint.name)).toEqual(["base_start", "final_start", "touchdown"]);
+  });
+
+  it("supports collapsing the middle wingsuit leg", () => {
+    const output = computePattern({
+      ...wingsuitInput,
+      gatesFt: [3000, 1000, 1000, 0],
+      winds: [
+        { altitudeFt: 3000, speedKt: 22, dirFromDeg: 240, source: "auto" },
+        { altitudeFt: 1000, speedKt: 14, dirFromDeg: 220, source: "auto" },
+      ],
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.segments.map((segment) => segment.name)).toEqual(["downwind", "final"]);
+    expect(output.waypoints.map((waypoint) => waypoint.name)).toEqual([
+      "downwind_start",
+      "final_start",
+      "touchdown",
+    ]);
+  });
+
+  it("blocks wingsuit inputs when both early legs collapse", () => {
+    const output = computePattern({
+      ...wingsuitInput,
+      gatesFt: [3000, 3000, 3000, 0],
+      winds: [{ altitudeFt: 3000, speedKt: 22, dirFromDeg: 240, source: "auto" }],
+    });
+
+    expect(output.blocked).toBe(true);
+    expect(output.warnings.some((warning) => warning.includes("requires at least two active legs"))).toBe(true);
   });
 });

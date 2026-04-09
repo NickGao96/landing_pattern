@@ -1,4 +1,6 @@
 export type PatternSide = "left" | "right";
+export type FlightMode = "canopy" | "wingsuit";
+export type WingsuitPresetId = "swift" | "atc" | "freak" | "aura" | "custom";
 
 export type SegmentName = "downwind" | "base" | "final";
 
@@ -28,7 +30,15 @@ export interface JumperInput {
   canopyAreaSqft: number;
 }
 
+export interface WingsuitProfile {
+  presetId?: WingsuitPresetId;
+  name: string;
+  flightSpeedKt: number;
+  fallRateFps: number;
+}
+
 export interface PatternInput {
+  mode: FlightMode;
   touchdownLat: number;
   touchdownLng: number;
   landingHeadingDeg: number;
@@ -38,6 +48,7 @@ export interface PatternInput {
   winds: WindLayer[];
   canopy: CanopyProfile;
   jumper: JumperInput;
+  wingsuit: WingsuitProfile;
 }
 
 export interface PatternWaypoint {
@@ -61,7 +72,7 @@ export interface PatternOutput {
   waypoints: PatternWaypoint[];
   segments: SegmentOutput[];
   metrics: {
-    wingLoading: number;
+    wingLoading: number | null;
     estAirspeedKt: number;
     estSinkFps: number;
   };

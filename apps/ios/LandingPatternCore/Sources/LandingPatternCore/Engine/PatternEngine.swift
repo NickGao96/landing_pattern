@@ -26,6 +26,19 @@ private struct SegmentSolveResult {
     let blockedReason: String?
 }
 
+private enum SegmentSolveKind {
+    case drift
+    case trackLocked
+}
+
+private struct SegmentDefinition {
+    let name: SegmentName
+    let headingDeg: Double
+    let startAltFt: Double
+    let endAltFt: Double
+    let solveKind: SegmentSolveKind
+}
+
 private func computeWingLoading(exitWeightLb: Double, canopyAreaSqft: Double) -> Double {
     exitWeightLb / canopyAreaSqft
 }
@@ -48,16 +61,6 @@ private func computeSinkFps(airspeedKt: Double, glideRatio: Double) -> Double {
     return airspeedFps / glideRatio
 }
 
-private func findRequiredWinds(gatesFt: [Double], winds: [WindLayer]) -> [String] {
-    guard gatesFt.count >= 3 else { return ["Gate altitudes must contain at least 4 values."] }
-    let required = [gatesFt[0], gatesFt[1], gatesFt[2]]
-    var errors: [String] = []
-    for altitude in required where getWindForAltitude(altitude, winds: winds) == nil {
-        errors.append("Missing wind layer around \(Int(round(altitude))) ft.")
-    }
-    return errors
-}
-
 private func computeLegHeading(landingHeadingDeg: Double, side: PatternSide, segment: SegmentName) -> Double {
     switch segment {
     case .final:
@@ -71,6 +74,58 @@ private func computeLegHeading(landingHeadingDeg: Double, side: PatternSide, seg
 
 private func vectorToHeadingDeg(_ vector: Vec2) -> Double {
     normalizeHeading(atan2(vector.east, vector.north) * 180 / .pi)
+}
+
+private func buildSegmentDefinitions(_ input: PatternInput) -> [SegmentDefinition] {
+    let downwindGate = input.gatesFt.indices.contains(0) ? input.gatesFt[0] : 0
+    let baseGate = input.gatesFt.indices.contains(1) ? input.gatesFt[1] : 0
+    let finalGate = input.gatesFt.indices.contains(2) ? input.gatesFt[2] : 0
+    let touchdownGate = input.gatesFt.indices.contains(3) ? input.gatesFt[3] : 0
+    let baseLegDrift = input.baseLegDrift ?? true
+
+    return [
+        SegmentDefinition(
+            name: .downwind,
+            headingDeg: computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .downwind),
+            startAltFt: downwindGate,
+            endAltFt: baseGate,
+            solveKind: .trackLocked
+        ),
+        SegmentDefinition(
+            name: .base,
+            headingDeg: computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .base),
+            startAltFt: baseGate,
+            endAltFt: finalGate,
+            solveKind: baseLegDrift ? .drift : .trackLocked
+        ),
+        SegmentDefinition(
+            name: .final,
+            headingDeg: computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .final),
+            startAltFt: finalGate,
+            endAltFt: touchdownGate,
+            solveKind: .trackLocked
+        ),
+    ]
+}
+
+private func activeSegmentDefinitions(_ input: PatternInput) -> [SegmentDefinition] {
+    let definitions = buildSegmentDefinitions(input)
+    guard input.mode == .wingsuit else {
+        return definitions
+    }
+    return definitions.filter { $0.startAltFt > $0.endAltFt }
+}
+
+private func requiredWindAltitudes(_ input: PatternInput) -> [Double] {
+    activeSegmentDefinitions(input).map(\.startAltFt)
+}
+
+private func findRequiredWinds(input: PatternInput, winds: [WindLayer]) -> [String] {
+    var errors: [String] = []
+    for altitude in requiredWindAltitudes(input) where getWindForAltitude(altitude, winds: winds) == nil {
+        errors.append("Missing wind layer around \(Int(round(altitude))) ft.")
+    }
+    return errors
 }
 
 private func computeDriftSegment(
@@ -132,7 +187,7 @@ private func computeTrackLockedSegment(
     if abs(windCross) >= airspeedKt {
         return SegmentSolveResult(
             segment: nil,
-            blockedReason: "\(name.rawValue) leg crosswind (\(String(format: "%.1f", abs(windCross))) kt) exceeds canopy airspeed capability."
+            blockedReason: "\(name.rawValue) leg crosswind (\(String(format: "%.1f", abs(windCross))) kt) exceeds airspeed capability."
         )
     }
 
@@ -162,6 +217,21 @@ private func computeTrackLockedSegment(
     return SegmentSolveResult(segment: segment, blockedReason: nil)
 }
 
+private func defaultMetrics(for mode: FlightMode) -> PatternMetrics {
+    PatternMetrics(wingLoading: mode == .canopy ? 0 : nil, estAirspeedKt: 0, estSinkFps: 0)
+}
+
+private func waypointName(for segment: SegmentName) -> PatternWaypointName {
+    switch segment {
+    case .downwind:
+        return .downwindStart
+    case .base:
+        return .baseStart
+    case .final:
+        return .finalStart
+    }
+}
+
 public func validatePatternInput(_ input: PatternInput) -> ValidationResult {
     var errors: [String] = []
     var warnings: [String] = []
@@ -174,20 +244,24 @@ public func validatePatternInput(_ input: PatternInput) -> ValidationResult {
         errors.append("Landing heading must be a finite degree value.")
     }
 
-    if !input.jumper.exitWeightLb.isFinite || !input.jumper.canopyAreaSqft.isFinite || input.jumper.exitWeightLb <= 0 || input.jumper.canopyAreaSqft <= 0 {
-        errors.append("Exit weight and canopy area must be finite and positive.")
-    }
+    if input.mode == .canopy {
+        if !input.jumper.exitWeightLb.isFinite || !input.jumper.canopyAreaSqft.isFinite || input.jumper.exitWeightLb <= 0 || input.jumper.canopyAreaSqft <= 0 {
+            errors.append("Exit weight and canopy area must be finite and positive.")
+        }
 
-    if !input.canopy.wlRef.isFinite || !input.canopy.airspeedRefKt.isFinite || !input.canopy.glideRatio.isFinite || input.canopy.wlRef <= 0 || input.canopy.airspeedRefKt <= 0 || input.canopy.glideRatio <= 0 {
-        errors.append("Canopy reference values must be finite and positive.")
-    }
+        if !input.canopy.wlRef.isFinite || !input.canopy.airspeedRefKt.isFinite || !input.canopy.glideRatio.isFinite || input.canopy.wlRef <= 0 || input.canopy.airspeedRefKt <= 0 || input.canopy.glideRatio <= 0 {
+            errors.append("Canopy reference values must be finite and positive.")
+        }
 
-    let hasNonFiniteCanopyTuning =
-        (input.canopy.airspeedWlExponent?.isFinite == false) ||
-        (input.canopy.airspeedMinKt?.isFinite == false) ||
-        (input.canopy.airspeedMaxKt?.isFinite == false)
-    if hasNonFiniteCanopyTuning {
-        errors.append("Canopy tuning values must be finite when provided.")
+        let hasNonFiniteCanopyTuning =
+            (input.canopy.airspeedWlExponent?.isFinite == false) ||
+            (input.canopy.airspeedMinKt?.isFinite == false) ||
+            (input.canopy.airspeedMaxKt?.isFinite == false)
+        if hasNonFiniteCanopyTuning {
+            errors.append("Canopy tuning values must be finite when provided.")
+        }
+    } else if !input.wingsuit.flightSpeedKt.isFinite || !input.wingsuit.fallRateFps.isFinite || input.wingsuit.flightSpeedKt <= 0 || input.wingsuit.fallRateFps <= 0 {
+        errors.append("Wingsuit flight speed and fall rate must be finite and positive.")
     }
 
     if input.gatesFt.count != 4 {
@@ -199,9 +273,20 @@ public func validatePatternInput(_ input: PatternInput) -> ValidationResult {
         let base = input.gatesFt[1]
         let final = input.gatesFt[2]
         let touchdown = input.gatesFt[3]
-        if !(downwind > base && base > final && final > touchdown) {
-            errors.append("Gate altitudes must be strictly descending, for example 900 > 600 > 300 > 0.")
+
+        if input.mode == .canopy {
+            if !(downwind > base && base > final && final > touchdown) {
+                errors.append("Gate altitudes must be strictly descending, for example 900 > 600 > 300 > 0.")
+            }
+        } else {
+            if !(downwind >= base && base >= final && final > touchdown) {
+                errors.append("Wingsuit gate altitudes must be non-increasing with an active final leg, for example 3000 >= 2000 >= 1000 > 0.")
+            }
+            if downwind == base && base == final {
+                errors.append("Wingsuit mode requires at least two active legs. Only one of the first two legs may disappear.")
+            }
         }
+
         if touchdown != 0 {
             warnings.append("Touchdown gate is expected to be 0 ft AGL in this model.")
         }
@@ -217,7 +302,7 @@ public func validatePatternInput(_ input: PatternInput) -> ValidationResult {
         }
     }
 
-    errors.append(contentsOf: findRequiredWinds(gatesFt: input.gatesFt, winds: input.winds))
+    errors.append(contentsOf: findRequiredWinds(input: input, winds: input.winds))
     return ValidationResult(valid: errors.isEmpty, errors: errors, warnings: warnings)
 }
 
@@ -229,130 +314,112 @@ public func computePattern(_ input: PatternInput) -> PatternOutput {
         return PatternOutput(
             waypoints: [PatternWaypoint(name: .touchdown, lat: input.touchdownLat, lng: input.touchdownLng, altFt: input.gatesFt.last ?? 0)],
             segments: [],
-            metrics: PatternMetrics(wingLoading: 0, estAirspeedKt: 0, estSinkFps: 0),
+            metrics: defaultMetrics(for: input.mode),
             warnings: warnings + validation.errors,
             blocked: true
         )
     }
 
-    let wingLoading = computeWingLoading(exitWeightLb: input.jumper.exitWeightLb, canopyAreaSqft: input.jumper.canopyAreaSqft)
-    let airspeedKt = computeAirspeedKt(input, wingLoading: wingLoading)
-    let sinkFps = computeSinkFps(airspeedKt: airspeedKt, glideRatio: input.canopy.glideRatio)
+    let wingLoading = input.mode == .canopy
+        ? computeWingLoading(exitWeightLb: input.jumper.exitWeightLb, canopyAreaSqft: input.jumper.canopyAreaSqft)
+        : nil
+    let airspeedKt = input.mode == .canopy
+        ? computeAirspeedKt(input, wingLoading: wingLoading ?? 0)
+        : input.wingsuit.flightSpeedKt
+    let sinkFps = input.mode == .canopy
+        ? computeSinkFps(airspeedKt: airspeedKt, glideRatio: input.canopy.glideRatio)
+        : input.wingsuit.fallRateFps
 
-    if wingLoading > wlMax {
+    if input.mode == .canopy, let wingLoading, wingLoading > wlMax {
         warnings.append("Wing loading \(String(format: "%.2f", wingLoading)) exceeds model limit (\(String(format: "%.1f", wlMax))). Pattern output is disabled.")
     }
 
-    let downwindHeading = computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .downwind)
-    let baseHeading = computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .base)
-    let finalHeading = computeLegHeading(landingHeadingDeg: input.landingHeadingDeg, side: input.side, segment: .final)
-    let baseLegDrift = input.baseLegDrift ?? true
-
-    let downwindResult = computeTrackLockedSegment(
-        name: .downwind,
-        trackHeadingDeg: downwindHeading,
-        segmentStartAltFt: input.gatesFt[0],
-        segmentEndAltFt: input.gatesFt[1],
-        winds: input.winds,
-        airspeedKt: airspeedKt,
-        sinkFps: sinkFps
-    )
-
-    let baseResult: SegmentSolveResult = baseLegDrift
-        ? computeDriftSegment(
-            name: .base,
-            headingDeg: baseHeading,
-            segmentStartAltFt: input.gatesFt[1],
-            segmentEndAltFt: input.gatesFt[2],
-            winds: input.winds,
-            airspeedKt: airspeedKt,
-            sinkFps: sinkFps
-        )
-        : computeTrackLockedSegment(
-            name: .base,
-            trackHeadingDeg: baseHeading,
-            segmentStartAltFt: input.gatesFt[1],
-            segmentEndAltFt: input.gatesFt[2],
-            winds: input.winds,
-            airspeedKt: airspeedKt,
-            sinkFps: sinkFps
-        )
-
-    let finalResult = computeTrackLockedSegment(
-        name: .final,
-        trackHeadingDeg: finalHeading,
-        segmentStartAltFt: input.gatesFt[2],
-        segmentEndAltFt: input.gatesFt[3],
-        winds: input.winds,
-        airspeedKt: airspeedKt,
-        sinkFps: sinkFps
-    )
-
-    if let reason = downwindResult.blockedReason { warnings.append(reason) }
-    if let reason = baseResult.blockedReason { warnings.append(reason) }
-    if let reason = finalResult.blockedReason { warnings.append(reason) }
-
-    let downwind = downwindResult.segment
-    let base = baseResult.segment
-    let final = finalResult.segment
-
-    if let downwind = downwind, downwind.alongLegSpeedKt < 0 {
-        warnings.append("Downwind leg tracks backward (\(String(format: "%.1f", downwind.alongLegSpeedKt)) kt).")
-    }
-    if let base = base, base.alongLegSpeedKt < 0 {
-        warnings.append("Base leg tracks backward (\(String(format: "%.1f", base.alongLegSpeedKt)) kt).")
-    }
-    if let final = final, final.alongLegSpeedKt < 0 {
-        warnings.append("Final leg tracks backward (\(String(format: "%.1f", final.alongLegSpeedKt)) kt).")
+    let activeDefinitions = activeSegmentDefinitions(input)
+    let solveResults = activeDefinitions.map { definition in
+        switch definition.solveKind {
+        case .drift:
+            return computeDriftSegment(
+                name: definition.name,
+                headingDeg: definition.headingDeg,
+                segmentStartAltFt: definition.startAltFt,
+                segmentEndAltFt: definition.endAltFt,
+                winds: input.winds,
+                airspeedKt: airspeedKt,
+                sinkFps: sinkFps
+            )
+        case .trackLocked:
+            return computeTrackLockedSegment(
+                name: definition.name,
+                trackHeadingDeg: definition.headingDeg,
+                segmentStartAltFt: definition.startAltFt,
+                segmentEndAltFt: definition.endAltFt,
+                winds: input.winds,
+                airspeedKt: airspeedKt,
+                sinkFps: sinkFps
+            )
+        }
     }
 
-    let finalForwardSpeedKt = final?.alongLegSpeedKt ?? 0
+    for result in solveResults {
+        if let reason = result.blockedReason {
+            warnings.append(reason)
+        }
+    }
+
+    let activeSegments = solveResults.compactMap(\.segment)
+
+    for segment in activeSegments where segment.alongLegSpeedKt < 0 {
+        warnings.append("\(segment.name.rawValue.capitalized) leg tracks backward (\(String(format: "%.1f", segment.alongLegSpeedKt)) kt).")
+    }
+
+    let finalForwardSpeedKt = activeSegments.first(where: { $0.name == .final })?.alongLegSpeedKt ?? 0
     if finalForwardSpeedKt < minFinalForwardGroundSpeedKt {
         warnings.append("Final-leg penetration is low (\(String(format: "%.1f", finalForwardSpeedKt)) kt along final). Consider a safer landing direction.")
     }
 
-    let blocked = wingLoading > wlMax || !sinkFps.isFinite || sinkFps <= 0 || downwind == nil || base == nil || final == nil
+    let blocked =
+        (input.mode == .canopy && (wingLoading ?? 0) > wlMax) ||
+        !sinkFps.isFinite ||
+        sinkFps <= 0 ||
+        activeSegments.count != activeDefinitions.count
+
+    let metrics = PatternMetrics(wingLoading: wingLoading, estAirspeedKt: airspeedKt, estSinkFps: sinkFps)
+
+    if blocked {
+        return PatternOutput(
+            waypoints: [PatternWaypoint(name: .touchdown, lat: input.touchdownLat, lng: input.touchdownLng, altFt: input.gatesFt[3])],
+            segments: [],
+            metrics: metrics,
+            warnings: warnings,
+            blocked: true
+        )
+    }
 
     let touchdown = LocalPoint(eastFt: 0, northFt: 0)
-    let finalGroundUnit = unitOrZero(final?.groundVectorKt ?? Vec2(east: 0, north: 0))
-    let downwindGroundUnit = unitOrZero(downwind?.groundVectorKt ?? Vec2(east: 0, north: 0))
+    var segmentStarts: [SegmentName: LocalPoint] = [:]
+    var segmentEnd = touchdown
 
-    let finalDistance = final?.distanceFt ?? 0
-    let finalStart = LocalPoint(
-        eastFt: touchdown.eastFt - finalGroundUnit.east * finalDistance,
-        northFt: touchdown.northFt - finalGroundUnit.north * finalDistance
-    )
+    for segment in activeSegments.reversed() {
+        let groundUnit = unitOrZero(segment.groundVectorKt)
+        let segmentStart = LocalPoint(
+            eastFt: segmentEnd.eastFt - groundUnit.east * segment.distanceFt,
+            northFt: segmentEnd.northFt - groundUnit.north * segment.distanceFt
+        )
+        segmentStarts[segment.name] = segmentStart
+        segmentEnd = segmentStart
+    }
 
-    let baseGroundUnit = unitOrZero(base?.groundVectorKt ?? Vec2(east: 0, north: 0))
-    let baseDistance = base?.distanceFt ?? 0
-    let baseStart = LocalPoint(
-        eastFt: finalStart.eastFt - baseGroundUnit.east * baseDistance,
-        northFt: finalStart.northFt - baseGroundUnit.north * baseDistance
-    )
-
-    let downwindDistance = downwind?.distanceFt ?? 0
-    let downwindStart = LocalPoint(
-        eastFt: baseStart.eastFt - downwindGroundUnit.east * downwindDistance,
-        northFt: baseStart.northFt - downwindGroundUnit.north * downwindDistance
-    )
+    let waypoints = activeDefinitions.compactMap { definition -> PatternWaypoint? in
+        guard let point = segmentStarts[definition.name] else { return nil }
+        let geo = localFeetToLatLng(refLat: input.touchdownLat, refLng: input.touchdownLng, eastFt: point.eastFt, northFt: point.northFt)
+        return PatternWaypoint(name: waypointName(for: definition.name), lat: geo.lat, lng: geo.lng, altFt: definition.startAltFt)
+    }
 
     let touchdownGeo = localFeetToLatLng(refLat: input.touchdownLat, refLng: input.touchdownLng, eastFt: touchdown.eastFt, northFt: touchdown.northFt)
-    let finalStartGeo = localFeetToLatLng(refLat: input.touchdownLat, refLng: input.touchdownLng, eastFt: finalStart.eastFt, northFt: finalStart.northFt)
-    let baseStartGeo = localFeetToLatLng(refLat: input.touchdownLat, refLng: input.touchdownLng, eastFt: baseStart.eastFt, northFt: baseStart.northFt)
-    let downwindStartGeo = localFeetToLatLng(refLat: input.touchdownLat, refLng: input.touchdownLng, eastFt: downwindStart.eastFt, northFt: downwindStart.northFt)
 
-    let waypoints: [PatternWaypoint] = blocked
-        ? [PatternWaypoint(name: .touchdown, lat: input.touchdownLat, lng: input.touchdownLng, altFt: input.gatesFt[3])]
-        : [
-            PatternWaypoint(name: .downwindStart, lat: downwindStartGeo.lat, lng: downwindStartGeo.lng, altFt: input.gatesFt[0]),
-            PatternWaypoint(name: .baseStart, lat: baseStartGeo.lat, lng: baseStartGeo.lng, altFt: input.gatesFt[1]),
-            PatternWaypoint(name: .finalStart, lat: finalStartGeo.lat, lng: finalStartGeo.lng, altFt: input.gatesFt[2]),
-            PatternWaypoint(name: .touchdown, lat: touchdownGeo.lat, lng: touchdownGeo.lng, altFt: input.gatesFt[3]),
-        ]
-
-    let segments: [SegmentOutput] = blocked
-        ? []
-        : [downwind!, base!, final!].map {
+    return PatternOutput(
+        waypoints: waypoints + [PatternWaypoint(name: .touchdown, lat: touchdownGeo.lat, lng: touchdownGeo.lng, altFt: input.gatesFt[3])],
+        segments: activeSegments.map {
             SegmentOutput(
                 name: $0.name,
                 headingDeg: $0.headingDeg,
@@ -362,13 +429,9 @@ public func computePattern(_ input: PatternInput) -> PatternOutput {
                 timeSec: $0.timeSec,
                 distanceFt: $0.distanceFt
             )
-        }
-
-    return PatternOutput(
-        waypoints: waypoints,
-        segments: segments,
-        metrics: PatternMetrics(wingLoading: wingLoading, estAirspeedKt: airspeedKt, estSinkFps: sinkFps),
+        },
+        metrics: metrics,
         warnings: warnings,
-        blocked: blocked
+        blocked: false
     )
 }

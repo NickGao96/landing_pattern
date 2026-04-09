@@ -19,7 +19,7 @@
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleDisplayName</key>
-    <string>LandingPattern</string>
+    <string>Flight Pattern</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Location is used to center map search and fetch nearby wind conditions.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

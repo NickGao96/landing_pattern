@@ -37,6 +37,26 @@ public struct URLSessionHTTPClient: HTTPClient {
     }
 }
 
+private struct PressureLevelDescriptor {
+    let level: String
+
+    var speedKey: String { "wind_speed_\(level)" }
+    var directionKey: String { "wind_direction_\(level)" }
+    var heightKey: String { "geopotential_height_\(level)" }
+}
+
+private let pressureLevels: [PressureLevelDescriptor] = [
+    "1000hPa",
+    "975hPa",
+    "950hPa",
+    "925hPa",
+    "900hPa",
+    "850hPa",
+    "800hPa",
+    "700hPa",
+    "600hPa",
+].map { PressureLevelDescriptor(level: $0) }
+
 public struct WeatherService {
     private let httpClient: HTTPClient
 
@@ -110,6 +130,66 @@ public struct WeatherService {
         }
 
         throw WeatherError.requestFailed("Unable to determine surface wind from NOAA/NWS or Open-Meteo. \(errors.joined(separator: " | "))")
+    }
+
+    public func fetchWingsuitWindProfile(lat: Double, lng: Double, altitudesFt: [Double]) async throws -> [WindLayer] {
+        guard !altitudesFt.isEmpty else {
+            return []
+        }
+
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        let hourlyFields = pressureLevels.flatMap { [$0.speedKey, $0.directionKey, $0.heightKey] }.joined(separator: ",")
+        components?.queryItems = [
+            URLQueryItem(name: "latitude", value: String(format: "%.4f", lat)),
+            URLQueryItem(name: "longitude", value: String(format: "%.4f", lng)),
+            URLQueryItem(name: "current", value: "wind_speed_10m,wind_direction_10m"),
+            URLQueryItem(name: "hourly", value: hourlyFields),
+            URLQueryItem(name: "forecast_hours", value: "1"),
+            URLQueryItem(name: "wind_speed_unit", value: "kn"),
+            URLQueryItem(name: "timezone", value: "UTC"),
+        ]
+
+        guard let url = components?.url else {
+            throw WeatherError.invalidResponse("Unable to build Open-Meteo upper-air URL")
+        }
+
+        let payload = try await fetchJSON(url: url)
+        let elevationFt = feetFromMeters((payload["elevation"] as? Double) ?? 0)
+
+        var candidates: [(altitudeMslFt: Double, speedKt: Double, dirFromDeg: Double)] = []
+
+        if
+            let current = payload["current"] as? [String: Any],
+            let speed = current["wind_speed_10m"] as? Double,
+            let direction = current["wind_direction_10m"] as? Double
+        {
+            candidates.append((altitudeMslFt: elevationFt + feetFromMeters(10), speedKt: speed, dirFromDeg: direction))
+        }
+
+        let hourly = payload["hourly"] as? [String: Any]
+        for descriptor in pressureLevels {
+            guard
+                let speed = firstNumber(in: hourly?[descriptor.speedKey]),
+                let direction = firstNumber(in: hourly?[descriptor.directionKey]),
+                let heightMeters = firstNumber(in: hourly?[descriptor.heightKey])
+            else {
+                continue
+            }
+
+            candidates.append((altitudeMslFt: feetFromMeters(heightMeters), speedKt: speed, dirFromDeg: direction))
+        }
+
+        guard !candidates.isEmpty else {
+            throw WeatherError.missingData("Open-Meteo upper-air response missing parseable winds.")
+        }
+
+        return altitudesFt.map { altitudeFt in
+            let requestedMslFt = altitudeFt + elevationFt
+            let nearest = candidates.min { lhs, rhs in
+                abs(lhs.altitudeMslFt - requestedMslFt) < abs(rhs.altitudeMslFt - requestedMslFt)
+            }!
+            return WindLayer(altitudeFt: altitudeFt, speedKt: nearest.speedKt, dirFromDeg: nearest.dirFromDeg, source: .auto)
+        }
     }
 
     public func extrapolateWindProfile(surface: SurfaceWind, altitudesFt: [Double], alpha: Double = 0.14) -> [WindLayer] {
@@ -213,6 +293,12 @@ public struct WeatherService {
         throw WeatherError.missingData("Open-Meteo response missing wind speed/direction.")
     }
 
+    private func firstNumber(in value: Any?) -> Double? {
+        guard let array = value as? [Any], let first = array.first else { return nil }
+        return first as? Double
+    }
+
+    private func feetFromMeters(_ meters: Double) -> Double { meters * 3.280839895 }
     private func knotsFromMetersPerSecond(_ mps: Double) -> Double { mps * 1.94384449 }
     private func knotsFromMilesPerHour(_ mph: Double) -> Double { mph * 0.868976 }
     private func knotsFromKilometersPerHour(_ kmh: Double) -> Double { kmh * 0.539957 }

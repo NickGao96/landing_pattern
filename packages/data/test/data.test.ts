@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extrapolateWindProfile, fetchNoaaSurfaceWind } from "../src";
+import { extrapolateWindProfile, fetchNoaaSurfaceWind, fetchWingsuitWindProfile } from "../src";
 
 function mockResponse(payload: unknown, status = 200): Response {
   return {
@@ -206,5 +206,56 @@ describe("fetchNoaaSurfaceWind", () => {
     await expect(fetchNoaaSurfaceWind(37, -122, fetcher as unknown as typeof fetch)).rejects.toThrow(
       "Unable to determine surface wind from NOAA/NWS or Open-Meteo",
     );
+  });
+});
+
+describe("fetchWingsuitWindProfile", () => {
+  it("maps requested altitudes to the nearest upper-air levels", async () => {
+    const fetcher = async () =>
+      mockResponse({
+        elevation: 100,
+        current: {
+          wind_speed_10m: 12,
+          wind_direction_10m: 200,
+        },
+        hourly: {
+          wind_speed_1000hPa: [20],
+          wind_direction_1000hPa: [220],
+          geopotential_height_1000hPa: [250],
+          wind_speed_925hPa: [35],
+          wind_direction_925hPa: [260],
+          geopotential_height_925hPa: [1100],
+        },
+      });
+
+    const profile = await fetchWingsuitWindProfile(37, -122, [200, 3200], fetcher as unknown as typeof fetch);
+
+    expect(profile).toHaveLength(2);
+    expect(profile[0]).toMatchObject({ altitudeFt: 200, speedKt: 12, dirFromDeg: 200, source: "auto" });
+    expect(profile[1]).toMatchObject({ altitudeFt: 3200, speedKt: 35, dirFromDeg: 260, source: "auto" });
+  });
+
+  it("preserves duplicate requested altitudes", async () => {
+    const fetcher = async () =>
+      mockResponse({
+        elevation: 0,
+        current: {
+          wind_speed_10m: 10,
+          wind_direction_10m: 180,
+        },
+        hourly: {
+          wind_speed_1000hPa: [18],
+          wind_direction_1000hPa: [210],
+          geopotential_height_1000hPa: [450],
+        },
+      });
+
+    const profile = await fetchWingsuitWindProfile(37, -122, [1200, 1200], fetcher as unknown as typeof fetch);
+
+    expect(profile).toHaveLength(2);
+    expect(profile[0]?.altitudeFt).toBe(1200);
+    expect(profile[1]?.altitudeFt).toBe(1200);
+    expect(profile[0]?.speedKt).toBe(profile[1]?.speedKt);
+    expect(profile[0]?.dirFromDeg).toBe(profile[1]?.dirFromDeg);
   });
 });

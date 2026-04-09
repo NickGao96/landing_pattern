@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, InputHTMLAttributes } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { canopyPresets, extrapolateWindProfile, fetchNoaaSurfaceWind } from "@landing/data";
+import { canopyPresets, extrapolateWindProfile, fetchNoaaSurfaceWind, fetchWingsuitWindProfile } from "@landing/data";
 import { computePattern } from "@landing/engine";
-import type { CanopyProfile, PatternInput, SurfaceWind, WindLayer } from "@landing/ui-types";
+import type {
+  CanopyProfile,
+  FlightMode,
+  PatternInput,
+  SurfaceWind,
+  WindLayer,
+  WingsuitPresetId,
+  WingsuitProfile,
+} from "@landing/ui-types";
 import { feetToMeters, knotsToMps, metersToFeet, mpsToKnots } from "./lib/units";
 import { type Language, useAppStore } from "./store";
 import { MapPanel } from "./components/MapPanel";
+import { glideRatioForWingsuit, normalizeWingsuitProfile, wingsuitProfileForPreset, withCustomWingsuit } from "./wingsuits";
 
 function numberFromInput(raw: string, fallback: number): number {
   const parsed = Number(raw);
@@ -101,29 +110,59 @@ const DEFAULT_AIRSPEED_MIN_KT = 8;
 const DEFAULT_AIRSPEED_MAX_KT = 35;
 
 function buildPatternInput(state: {
+  mode: FlightMode;
   touchdown: { lat: number; lng: number };
   landingHeadingDeg: number;
   side: "left" | "right";
   baseLegDrift: boolean;
-  gatesFt: [number, number, number, number];
-  windLayers: WindLayer[];
-  canopy: CanopyProfile;
-  exitWeightLb: number;
+  canopySettings: {
+    gatesFt: [number, number, number, number];
+    windLayers: WindLayer[];
+    canopy: CanopyProfile;
+    exitWeightLb: number;
+  };
+  wingsuitSettings: {
+    gatesFt: [number, number, number, number];
+    windLayers: WindLayer[];
+    wingsuit: WingsuitProfile;
+  };
 }): PatternInput {
+  const gatesFt = state.mode === "canopy" ? state.canopySettings.gatesFt : state.wingsuitSettings.gatesFt;
+  const windLayers = state.mode === "canopy" ? state.canopySettings.windLayers : state.wingsuitSettings.windLayers;
   return {
+    mode: state.mode,
     touchdownLat: state.touchdown.lat,
     touchdownLng: state.touchdown.lng,
     landingHeadingDeg: state.landingHeadingDeg,
     side: state.side,
     baseLegDrift: state.baseLegDrift,
-    gatesFt: state.gatesFt,
-    winds: state.windLayers,
-    canopy: state.canopy,
+    gatesFt,
+    winds: windLayers,
+    canopy: state.canopySettings.canopy,
     jumper: {
-      exitWeightLb: state.exitWeightLb,
-      canopyAreaSqft: state.canopy.sizeSqft,
+      exitWeightLb: state.canopySettings.exitWeightLb,
+      canopyAreaSqft: state.canopySettings.canopy.sizeSqft,
     },
+    wingsuit: state.wingsuitSettings.wingsuit,
   };
+}
+
+function getRequestedWindAltitudes(mode: FlightMode, gatesFt: [number, number, number, number]): number[] {
+  if (mode === "canopy") {
+    return [gatesFt[0], gatesFt[1], gatesFt[2]];
+  }
+
+  const activeAltitudes: number[] = [];
+  if (gatesFt[0] > gatesFt[1]) {
+    activeAltitudes.push(gatesFt[0]);
+  }
+  if (gatesFt[1] > gatesFt[2]) {
+    activeAltitudes.push(gatesFt[1]);
+  }
+  if (gatesFt[2] > gatesFt[3]) {
+    activeAltitudes.push(gatesFt[2]);
+  }
+  return activeAltitudes;
 }
 
 function exportSnapshot(data: unknown): void {
@@ -158,7 +197,7 @@ interface LocationSearchResult {
 const translations = {
   en: {
     statusReady: "Ready.",
-    title: "Landing Pattern Simulator",
+    title: "Flight Pattern Simulator",
     planningNote:
       "Planning aid only. Not operational guidance. Always follow DZ procedures, traffic, and instructor/coach input.",
     languageSection: "Language",
@@ -180,7 +219,11 @@ const translations = {
     spotNamePlaceholder: "Spot name",
     saveSpot: "Save Spot",
     selectSavedSpot: "Select saved spot",
+    modeSection: "Flight Mode",
+    canopyMode: "Canopy",
+    wingsuitMode: "Wingsuit",
     canopyAndJumper: "Canopy + Jumper",
+    wingsuitSettings: "Wingsuit",
     preset: "Preset",
     canopySizeSqft: "Canopy Size (sqft)",
     exitWeightLb: "Exit Weight (lb)",
@@ -192,8 +235,19 @@ const translations = {
     airspeedMaxKt: "Airspeed Max (kt)",
     currentWlSummary: (wingLoading: number, modeledAirspeedKt: number) =>
       `Current WL ${wingLoading.toFixed(2)} => Modeled Airspeed ${modeledAirspeedKt.toFixed(1)} kt`,
+    currentWingsuitSummary: (flightSpeedKt: number, fallRateFps: number, glideRatio: number) =>
+      `Horizontal ${flightSpeedKt.toFixed(1)} kt, Vertical ${fallRateFps.toFixed(1)} ft/s, Approx GR ${glideRatio.toFixed(2)}`,
     rawModelSummary: (modeledRawAirspeedKt: number, airspeedClampLabel: string | null) =>
       `Raw model ${modeledRawAirspeedKt.toFixed(1)} kt${airspeedClampLabel ? ` (${airspeedClampLabel})` : ""}`,
+    wingsuitPreset: "Wingsuit Preset",
+    wingsuitPresetSwift: "SWIFT",
+    wingsuitPresetAtc: "ATC",
+    wingsuitPresetFreak: "FREAK",
+    wingsuitPresetAura: "AURA",
+    wingsuitPresetCustom: "Custom",
+    wingsuitName: "Wingsuit Name",
+    flightSpeedKt: "Horizontal Speed (kt)",
+    fallRateFps: "Fall Rate (ft/s)",
     patternSettings: "Pattern Settings",
     side: "Side",
     left: "Left",
@@ -202,7 +256,10 @@ const translations = {
     landingHeadingDeg: "Landing Heading (deg)",
     suggestHeadwindFinal: "Suggest Headwind Final",
     landingDirectionSlider: "Landing Direction Slider",
-    gateLabel: (index: number, altUnitLabel: string) => `Gate ${index + 1} (${altUnitLabel})`,
+    gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
+      mode === "canopy"
+        ? `${(["Downwind", "Base", "Final", "Touchdown"][index] ?? `Gate ${index + 1}`)} (${altUnitLabel})`
+        : `${(["Exit", "Turn 1", "Turn 2", "Deploy"][index] ?? `Gate ${index + 1}`)} (${altUnitLabel})`,
     shearExponent: "Shear Exponent",
     windLayers: "Wind Layers",
     altLabel: (altUnitLabel: string) => `Alt (${altUnitLabel})`,
@@ -211,6 +268,7 @@ const translations = {
     outputs: "Outputs",
     wingLoading: "Wing Loading",
     estAirspeed: "Est. Airspeed",
+    estFlightSpeed: "Horizontal Speed",
     lastSurfaceWind: (
       speed: string,
       speedUnitLabel: string,
@@ -219,6 +277,7 @@ const translations = {
     ) => `Last Surface Wind: ${speed} ${speedUnitLabel} from ${dirFromDeg} deg (${source})`,
     speedModel: (airspeedRefKt: string, wlRef: string, exponent: string) =>
       `Speed Model: ref ${airspeedRefKt}kt @ WL ${wlRef}, exponent ${exponent}`,
+    wingsuitModel: (name: string) => `Wingsuit setup: ${name}`,
     estSink: (estSinkFps: string) => `Est. Sink: ${estSinkFps} ft/s`,
     leg: "Leg",
     heading: "Heading",
@@ -232,8 +291,12 @@ const translations = {
     importExport: "Import / Export",
     exportSnapshotJson: "Export Snapshot JSON",
     importSnapshotJson: "Import Snapshot JSON",
+    fetchWingsuitWind: "Fetch Upper Winds",
     statusLoadedWind: (surfaceWind: SurfaceWind, lat: number, lng: number) =>
       `Loaded ${surfaceWind.source} wind at touchdown (${lat.toFixed(4)}, ${lng.toFixed(4)}): ${surfaceWind.speedKt.toFixed(1)} kt from ${surfaceWind.dirFromDeg.toFixed(0)} deg.`,
+    statusLoadedUpperWind: (count: number) => `Loaded upper-air winds for ${count} active start altitude${count === 1 ? "" : "s"}.`,
+    statusLoadedUpperWindFallback: (errorText: string) =>
+      `Upper-air wind fetch failed. Fell back to extrapolated surface winds. ${errorText}`,
     statusAutoWindFailed: (errorText: string, includeCoverageHint: boolean) =>
       `Auto wind failed. Use manual inputs.${includeCoverageHint ? " NOAA API is mostly US-only; this spot may be outside coverage." : ""} ${errorText}`.trim(),
     statusGeoUnavailable: "Geolocation is not available in this browser.",
@@ -260,7 +323,7 @@ const translations = {
   },
   zh: {
     statusReady: "就绪。",
-    title: "着陆航线模拟器",
+    title: "飞行航线模拟器",
     planningNote: "仅用于规划参考，不构成实际运行指导。请始终遵守 DZ 程序、空中交通和教练指示。",
     languageSection: "语言",
     languageEnglish: "English",
@@ -281,7 +344,11 @@ const translations = {
     spotNamePlaceholder: "点位名称",
     saveSpot: "保存点位",
     selectSavedSpot: "选择已保存点位",
+    modeSection: "飞行模式",
+    canopyMode: "伞翼",
+    wingsuitMode: "翼装",
     canopyAndJumper: "伞翼与跳伞员",
+    wingsuitSettings: "翼装",
     preset: "预设",
     canopySizeSqft: "伞翼面积 (sqft)",
     exitWeightLb: "出舱重量 (lb)",
@@ -293,8 +360,19 @@ const translations = {
     airspeedMaxKt: "最大空速 (kt)",
     currentWlSummary: (wingLoading: number, modeledAirspeedKt: number) =>
       `当前翼载 ${wingLoading.toFixed(2)} => 模型空速 ${modeledAirspeedKt.toFixed(1)} kt`,
+    currentWingsuitSummary: (flightSpeedKt: number, fallRateFps: number, glideRatio: number) =>
+      `水平速度 ${flightSpeedKt.toFixed(1)} kt，垂直速度 ${fallRateFps.toFixed(1)} ft/s，约滑翔比 ${glideRatio.toFixed(2)}`,
     rawModelSummary: (modeledRawAirspeedKt: number, airspeedClampLabel: string | null) =>
       `原始模型 ${modeledRawAirspeedKt.toFixed(1)} kt${airspeedClampLabel ? `（${airspeedClampLabel}）` : ""}`,
+    wingsuitPreset: "翼装预设",
+    wingsuitPresetSwift: "SWIFT",
+    wingsuitPresetAtc: "ATC",
+    wingsuitPresetFreak: "FREAK",
+    wingsuitPresetAura: "AURA",
+    wingsuitPresetCustom: "自定义",
+    wingsuitName: "翼装名称",
+    flightSpeedKt: "水平速度 (kt)",
+    fallRateFps: "下沉率 (ft/s)",
     patternSettings: "航线设置",
     side: "方向",
     left: "左",
@@ -303,8 +381,10 @@ const translations = {
     landingHeadingDeg: "着陆航向 (度)",
     suggestHeadwindFinal: "一键设为迎风着陆航向",
     landingDirectionSlider: "着陆方向滑块",
-    gateLabel: (index: number, altUnitLabel: string) =>
-      `${(["第一边", "第二边", "第三边", "接地点"][index] ?? `阶段${index + 1}`)}高度 (${altUnitLabel})`,
+    gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
+      mode === "canopy"
+        ? `${(["第一边", "第二边", "第三边", "接地点"][index] ?? `阶段${index + 1}`)}高度 (${altUnitLabel})`
+        : `${(["出舱", "第一转弯", "第二转弯", "开伞"][index] ?? `阶段${index + 1}`)}高度 (${altUnitLabel})`,
     shearExponent: "风切变指数",
     windLayers: "分层风",
     altLabel: (altUnitLabel: string) => `高度 (${altUnitLabel})`,
@@ -313,6 +393,7 @@ const translations = {
     outputs: "输出",
     wingLoading: "翼载",
     estAirspeed: "估算空速",
+    estFlightSpeed: "水平速度",
     lastSurfaceWind: (
       speed: string,
       speedUnitLabel: string,
@@ -321,6 +402,7 @@ const translations = {
     ) => `最近地表风: ${speed} ${speedUnitLabel}，来自 ${dirFromDeg} 度（${source}）`,
     speedModel: (airspeedRefKt: string, wlRef: string, exponent: string) =>
       `速度模型: 参考 ${airspeedRefKt}kt @ 翼载 ${wlRef}，指数 ${exponent}`,
+    wingsuitModel: (name: string) => `翼装配置：${name}`,
     estSink: (estSinkFps: string) => `估算下沉率: ${estSinkFps} ft/s`,
     leg: "航段",
     heading: "航向",
@@ -334,8 +416,11 @@ const translations = {
     importExport: "导入 / 导出",
     exportSnapshotJson: "导出快照 JSON",
     importSnapshotJson: "导入快照 JSON",
+    fetchWingsuitWind: "获取高空风",
     statusLoadedWind: (surfaceWind: SurfaceWind, lat: number, lng: number) =>
       `已加载 ${surfaceWind.source} 风数据（着陆点 ${lat.toFixed(4)}, ${lng.toFixed(4)}）：${surfaceWind.speedKt.toFixed(1)} kt，来向 ${surfaceWind.dirFromDeg.toFixed(0)} 度。`,
+    statusLoadedUpperWind: (count: number) => `已加载 ${count} 个有效起始高度的高空风。`,
+    statusLoadedUpperWindFallback: (errorText: string) => `高空风获取失败，已回退为地表风外推。${errorText}`,
     statusAutoWindFailed: (errorText: string, includeCoverageHint: boolean) =>
       `自动获取风数据失败，请手动输入。${includeCoverageHint ? " NOAA API 主要覆盖美国，此地点可能超出范围。" : ""} ${errorText}`.trim(),
     statusGeoUnavailable: "当前浏览器不支持定位。",
@@ -375,6 +460,8 @@ export default function App() {
     setLanguage,
     unitSystem,
     setUnitSystem,
+    mode,
+    setMode,
     location,
     setLocation,
     touchdown,
@@ -385,22 +472,69 @@ export default function App() {
     setSide,
     baseLegDrift,
     setBaseLegDrift,
-    gatesFt,
-    setGates,
     shearAlpha,
     setShearAlpha,
-    canopy,
+    canopySettings,
+    setCanopyGates,
     setCanopy,
-    exitWeightLb,
     setExitWeight,
-    windLayers,
-    setWindLayers,
-    updateWindLayer,
+    setCanopyWindLayers,
+    updateCanopyWindLayer,
+    wingsuitSettings,
+    setWingsuitGates,
+    setWingsuit,
+    setWingsuitWindLayers,
+    updateWingsuitWindLayer,
     namedSpots,
     saveNamedSpot,
     selectNamedSpot,
   } = useAppStore();
   const t = translations[language];
+  const canopy = canopySettings.canopy;
+  const exitWeightLb = canopySettings.exitWeightLb;
+  const wingsuit = wingsuitSettings.wingsuit;
+  const wingsuitPresetId: WingsuitPresetId =
+    wingsuit.presetId === "swift" ||
+    wingsuit.presetId === "atc" ||
+    wingsuit.presetId === "freak" ||
+    wingsuit.presetId === "aura"
+      ? wingsuit.presetId
+      : "custom";
+  const gatesFt = mode === "canopy" ? canopySettings.gatesFt : wingsuitSettings.gatesFt;
+  const windLayers = mode === "canopy" ? canopySettings.windLayers : wingsuitSettings.windLayers;
+  const wingsuitGlideRatio = useMemo(() => glideRatioForWingsuit(wingsuit), [wingsuit]);
+
+  function setActiveGates(nextGates: [number, number, number, number]): void {
+    if (mode === "canopy") {
+      setCanopyGates(nextGates);
+    } else {
+      setWingsuitGates(nextGates);
+    }
+  }
+
+  function setActiveWindLayers(nextLayers: WindLayer[]): void {
+    if (mode === "canopy") {
+      setCanopyWindLayers(nextLayers);
+    } else {
+      setWingsuitWindLayers(nextLayers);
+    }
+  }
+
+  function updateActiveWindLayer(layerIndex: number, patch: Partial<WindLayer>): void {
+    if (mode === "canopy") {
+      updateCanopyWindLayer(layerIndex, patch);
+    } else {
+      updateWingsuitWindLayer(layerIndex, patch);
+    }
+  }
+
+  function handleWingsuitPresetChange(presetId: WingsuitPresetId): void {
+    if (presetId === "custom") {
+      setWingsuit(withCustomWingsuit(wingsuit));
+      return;
+    }
+    setWingsuit(wingsuitProfileForPreset(presetId));
+  }
 
   const [touchdownLatInput, setTouchdownLatInput] = useState(touchdown.lat.toFixed(5));
   const [touchdownLngInput, setTouchdownLngInput] = useState(touchdown.lng.toFixed(5));
@@ -421,16 +555,15 @@ export default function App() {
   const patternInput = useMemo(
     () =>
       buildPatternInput({
+        mode,
         touchdown,
         landingHeadingDeg,
         side,
         baseLegDrift,
-        gatesFt,
-        windLayers,
-        canopy,
-        exitWeightLb,
+        canopySettings,
+        wingsuitSettings,
       }),
-    [touchdown, landingHeadingDeg, side, baseLegDrift, gatesFt, windLayers, canopy, exitWeightLb],
+    [mode, touchdown, landingHeadingDeg, side, baseLegDrift, canopySettings, wingsuitSettings],
   );
 
   const patternOutput = useMemo(() => computePattern(patternInput), [patternInput]);
@@ -456,12 +589,47 @@ export default function App() {
   }, [patternInput, landingHeadingDeg]);
 
   const windMutation = useMutation({
-    mutationFn: async () => fetchNoaaSurfaceWind(touchdown.lat, touchdown.lng),
-    onSuccess: (surfaceWind) => {
-      const profile = extrapolateWindProfile(surfaceWind, gatesFt.slice(0, 3), shearAlpha);
-      setWindLayers(profile);
-      setLastSurfaceWind(surfaceWind);
-      setStatusMessage(t.statusLoadedWind(surfaceWind, touchdown.lat, touchdown.lng));
+    mutationFn: async () => {
+      const requestedAltitudes = getRequestedWindAltitudes(mode, gatesFt);
+      if (mode === "wingsuit") {
+        try {
+          const profile = await fetchWingsuitWindProfile(touchdown.lat, touchdown.lng, requestedAltitudes);
+          return {
+            type: "upper-air" as const,
+            profile,
+          };
+        } catch (error) {
+          const surfaceWind = await fetchNoaaSurfaceWind(touchdown.lat, touchdown.lng);
+          return {
+            type: "fallback" as const,
+            profile: extrapolateWindProfile(surfaceWind, requestedAltitudes, shearAlpha),
+            surfaceWind,
+            errorText: String(error),
+          };
+        }
+      }
+
+      const surfaceWind = await fetchNoaaSurfaceWind(touchdown.lat, touchdown.lng);
+      return {
+        type: "surface" as const,
+        profile: extrapolateWindProfile(surfaceWind, requestedAltitudes, shearAlpha),
+        surfaceWind,
+      };
+    },
+    onSuccess: (result) => {
+      setActiveWindLayers(result.profile);
+      if (result.type === "surface") {
+        setLastSurfaceWind(result.surfaceWind);
+        setStatusMessage(t.statusLoadedWind(result.surfaceWind, touchdown.lat, touchdown.lng));
+        return;
+      }
+      if (result.type === "fallback") {
+        setLastSurfaceWind(result.surfaceWind);
+        setStatusMessage(t.statusLoadedUpperWindFallback(result.errorText));
+        return;
+      }
+      setLastSurfaceWind(null);
+      setStatusMessage(t.statusLoadedUpperWind(result.profile.length));
     },
     onError: (error) => {
       setLastSurfaceWind(null);
@@ -584,16 +752,15 @@ export default function App() {
 
   function handleExport(): void {
     exportSnapshot({
+      mode,
       location,
       touchdown,
       landingHeadingDeg,
       side,
       baseLegDrift,
-      gatesFt,
       shearAlpha,
-      canopy,
-      exitWeightLb,
-      windLayers,
+      canopySettings,
+      wingsuitSettings,
       namedSpots,
       unitSystem,
       language,
@@ -613,6 +780,7 @@ export default function App() {
     try {
       const text = await readTextFromFile(file);
       const payload = JSON.parse(text) as Partial<{
+        mode: FlightMode;
         location: { lat: number; lng: number; source?: "default" | "gps" | "manual" };
         touchdown: { lat: number; lng: number };
         landingHeadingDeg: number;
@@ -623,6 +791,17 @@ export default function App() {
         canopy: CanopyProfile;
         exitWeightLb: number;
         windLayers: WindLayer[];
+        canopySettings: {
+          gatesFt: [number, number, number, number];
+          canopy: CanopyProfile;
+          exitWeightLb: number;
+          windLayers: WindLayer[];
+        };
+        wingsuitSettings: {
+          gatesFt: [number, number, number, number];
+          wingsuit: WingsuitProfile;
+          windLayers: WindLayer[];
+        };
         language: Language;
       }>;
 
@@ -645,20 +824,51 @@ export default function App() {
       if (typeof payload.baseLegDrift === "boolean") {
         setBaseLegDrift(payload.baseLegDrift);
       }
-      if (payload.gatesFt && payload.gatesFt.length === 4) {
-        setGates(payload.gatesFt);
-      }
       if (typeof payload.shearAlpha === "number") {
         setShearAlpha(payload.shearAlpha);
       }
-      if (payload.canopy) {
-        setCanopy(payload.canopy);
+      if (payload.canopySettings) {
+        if (payload.canopySettings.gatesFt?.length === 4) {
+          setCanopyGates(payload.canopySettings.gatesFt);
+        }
+        if (payload.canopySettings.canopy) {
+          setCanopy(payload.canopySettings.canopy);
+        }
+        if (typeof payload.canopySettings.exitWeightLb === "number") {
+          setExitWeight(payload.canopySettings.exitWeightLb);
+        }
+        if (payload.canopySettings.windLayers?.length) {
+          setCanopyWindLayers(payload.canopySettings.windLayers);
+        }
+      } else {
+        if (payload.gatesFt && payload.gatesFt.length === 4) {
+          setCanopyGates(payload.gatesFt);
+        }
+        if (payload.canopy) {
+          setCanopy(payload.canopy);
+        }
+        if (typeof payload.exitWeightLb === "number") {
+          setExitWeight(payload.exitWeightLb);
+        }
+        if (payload.windLayers && payload.windLayers.length > 0) {
+          setCanopyWindLayers(payload.windLayers);
+        }
       }
-      if (typeof payload.exitWeightLb === "number") {
-        setExitWeight(payload.exitWeightLb);
+      if (payload.wingsuitSettings) {
+        if (payload.wingsuitSettings.gatesFt?.length === 4) {
+          setWingsuitGates(payload.wingsuitSettings.gatesFt);
+        }
+        if (payload.wingsuitSettings.wingsuit) {
+          setWingsuit(normalizeWingsuitProfile(payload.wingsuitSettings.wingsuit));
+        }
+        if (payload.wingsuitSettings.windLayers?.length) {
+          setWingsuitWindLayers(payload.wingsuitSettings.windLayers);
+        }
       }
-      if (payload.windLayers && payload.windLayers.length > 0) {
-        setWindLayers(payload.windLayers);
+      if (payload.mode === "canopy" || payload.mode === "wingsuit") {
+        setMode(payload.mode);
+      } else {
+        setMode("canopy");
       }
       if (payload.language === "en" || payload.language === "zh") {
         setLanguage(payload.language);
@@ -675,7 +885,7 @@ export default function App() {
   const airspeedMinKt = canopy.airspeedMinKt ?? DEFAULT_AIRSPEED_MIN_KT;
   const airspeedMaxKt = canopy.airspeedMaxKt ?? DEFAULT_AIRSPEED_MAX_KT;
   const airspeedRange = Math.max(airspeedMaxKt - airspeedMinKt, 1);
-  const wingLoading = patternOutput.metrics.wingLoading;
+  const wingLoading = patternOutput.metrics.wingLoading ?? 0;
   const wlRatio = wingLoading / Math.max(canopy.wlRef, 1e-6);
   const modeledRawAirspeedKt = canopy.airspeedRefKt * Math.pow(Math.max(wlRatio, 1e-6), canopy.airspeedWlExponent ?? 0.5);
   const modeledAirspeedKt = patternOutput.metrics.estAirspeedKt;
@@ -751,11 +961,25 @@ export default function App() {
           </section>
 
           <section>
+            <h2>{t.modeSection}</h2>
+            <div className="row">
+              <label>
+                <input type="radio" checked={mode === "canopy"} onChange={() => setMode("canopy")} />
+                {t.canopyMode}
+              </label>
+              <label>
+                <input type="radio" checked={mode === "wingsuit"} onChange={() => setMode("wingsuit")} />
+                {t.wingsuitMode}
+              </label>
+            </div>
+          </section>
+
+          <section>
             <h2>{t.touchdownSpot}</h2>
             <div className="row wrap">
               <button onClick={handleUseGeolocation}>{t.useBrowserLocation}</button>
               <button onClick={() => windMutation.mutate()} disabled={windMutation.isPending}>
-                {windMutation.isPending ? t.loadingWind : t.fetchNoaaWind}
+                {windMutation.isPending ? t.loadingWind : mode === "canopy" ? t.fetchNoaaWind : t.fetchWingsuitWind}
               </button>
             </div>
             <div className="location-search">
@@ -821,93 +1045,139 @@ export default function App() {
             ) : null}
           </section>
 
-          <section>
-            <h2>{t.canopyAndJumper}</h2>
-            <label>
-              {t.preset}
-              <select value={canopy.model} onChange={(event) => handlePresetChange(event.target.value)}>
-                {canopyPresets.map((preset) => (
-                  <option key={preset.model} value={preset.model}>
-                    {preset.model}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid two">
+          {mode === "canopy" ? (
+            <section>
+              <h2>{t.canopyAndJumper}</h2>
               <label>
-                {t.canopySizeSqft}
-                <NumberInput
-                  value={canopy.sizeSqft}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, sizeSqft: nextValue })}
-                />
+                {t.preset}
+                <select value={canopy.model} onChange={(event) => handlePresetChange(event.target.value)}>
+                  {canopyPresets.map((preset) => (
+                    <option key={preset.model} value={preset.model}>
+                      {preset.model}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <label>
-                {t.exitWeightLb}
-                <NumberInput value={exitWeightLb} onValueChange={(nextValue) => setExitWeight(nextValue)} />
-              </label>
-              <label>
-                {t.airspeedRefAtWlRefKt}
-                <NumberInput
-                  value={canopy.airspeedRefKt}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedRefKt: nextValue })}
-                />
-              </label>
-              <label>
-                {t.wlRef}
-                <NumberInput
-                  step="0.05"
-                  value={canopy.wlRef}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, wlRef: Math.max(0.1, nextValue) })}
-                />
-              </label>
-              <label>
-                {t.glideRatio}
-                <NumberInput
-                  step="0.1"
-                  value={canopy.glideRatio}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, glideRatio: nextValue })}
-                />
-              </label>
-              <label>
-                {t.wlSpeedExponent}
-                <NumberInput
-                  step="0.05"
-                  value={canopy.airspeedWlExponent ?? 0.5}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedWlExponent: nextValue })}
-                />
-              </label>
-              <label>
-                {t.airspeedMinKt}
-                <NumberInput
-                  step="0.5"
-                  value={airspeedMinKt}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedMinKt: nextValue })}
-                />
-              </label>
-              <label>
-                {t.airspeedMaxKt}
-                <NumberInput
-                  step="0.5"
-                  value={airspeedMaxKt}
-                  onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedMaxKt: nextValue })}
-                />
-              </label>
-            </div>
-            <p className="status">
-              {t.currentWlSummary(patternOutput.metrics.wingLoading, patternOutput.metrics.estAirspeedKt)}
-            </p>
-            <div className="airspeed-meter">
-              <div className="airspeed-meter-track">
-                <div className="airspeed-meter-marker" style={{ left: `calc(${airspeedGaugePct}% - 1px)` }} />
+              <div className="grid two">
+                <label>
+                  {t.canopySizeSqft}
+                  <NumberInput
+                    value={canopy.sizeSqft}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, sizeSqft: nextValue })}
+                  />
+                </label>
+                <label>
+                  {t.exitWeightLb}
+                  <NumberInput value={exitWeightLb} onValueChange={(nextValue) => setExitWeight(nextValue)} />
+                </label>
+                <label>
+                  {t.airspeedRefAtWlRefKt}
+                  <NumberInput
+                    value={canopy.airspeedRefKt}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedRefKt: nextValue })}
+                  />
+                </label>
+                <label>
+                  {t.wlRef}
+                  <NumberInput
+                    step="0.05"
+                    value={canopy.wlRef}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, wlRef: Math.max(0.1, nextValue) })}
+                  />
+                </label>
+                <label>
+                  {t.glideRatio}
+                  <NumberInput
+                    step="0.1"
+                    value={canopy.glideRatio}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, glideRatio: nextValue })}
+                  />
+                </label>
+                <label>
+                  {t.wlSpeedExponent}
+                  <NumberInput
+                    step="0.05"
+                    value={canopy.airspeedWlExponent ?? 0.5}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedWlExponent: nextValue })}
+                  />
+                </label>
+                <label>
+                  {t.airspeedMinKt}
+                  <NumberInput
+                    step="0.5"
+                    value={airspeedMinKt}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedMinKt: nextValue })}
+                  />
+                </label>
+                <label>
+                  {t.airspeedMaxKt}
+                  <NumberInput
+                    step="0.5"
+                    value={airspeedMaxKt}
+                    onValueChange={(nextValue) => setCanopy({ ...canopy, airspeedMaxKt: nextValue })}
+                  />
+                </label>
               </div>
-              <div className="airspeed-meter-scale">
-                <span>{airspeedMinKt.toFixed(1)} kt</span>
-                <span>{modeledAirspeedKt.toFixed(1)} kt</span>
-                <span>{airspeedMaxKt.toFixed(1)} kt</span>
+              <p className="status">{t.currentWlSummary(wingLoading, patternOutput.metrics.estAirspeedKt)}</p>
+              <div className="airspeed-meter">
+                <div className="airspeed-meter-track">
+                  <div className="airspeed-meter-marker" style={{ left: `calc(${airspeedGaugePct}% - 1px)` }} />
+                </div>
+                <div className="airspeed-meter-scale">
+                  <span>{airspeedMinKt.toFixed(1)} kt</span>
+                  <span>{modeledAirspeedKt.toFixed(1)} kt</span>
+                  <span>{airspeedMaxKt.toFixed(1)} kt</span>
+                </div>
+                <p className="status">{t.rawModelSummary(modeledRawAirspeedKt, airspeedClampLabel)}</p>
               </div>
-              <p className="status">{t.rawModelSummary(modeledRawAirspeedKt, airspeedClampLabel)}</p>
-            </div>
-          </section>
+            </section>
+          ) : (
+            <section>
+              <h2>{t.wingsuitSettings}</h2>
+              <div className="grid two">
+                <label>
+                  {t.wingsuitPreset}
+                  <select value={wingsuitPresetId} onChange={(event) => handleWingsuitPresetChange(event.target.value as WingsuitPresetId)}>
+                    <option value="swift">{t.wingsuitPresetSwift}</option>
+                    <option value="atc">{t.wingsuitPresetAtc}</option>
+                    <option value="freak">{t.wingsuitPresetFreak}</option>
+                    <option value="aura">{t.wingsuitPresetAura}</option>
+                    <option value="custom">{t.wingsuitPresetCustom}</option>
+                  </select>
+                </label>
+                <label>
+                  {t.wingsuitName}
+                  <input
+                    value={wingsuit.name}
+                    onChange={(event) => setWingsuit(withCustomWingsuit({ ...wingsuit, name: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  {t.flightSpeedKt}
+                  <NumberInput
+                    step="0.5"
+                    value={wingsuit.flightSpeedKt}
+                    onValueChange={(nextValue) =>
+                      setWingsuit(withCustomWingsuit({ ...wingsuit, flightSpeedKt: nextValue }))
+                    }
+                  />
+                </label>
+                <label>
+                  {t.fallRateFps}
+                  <NumberInput
+                    step="0.1"
+                    value={wingsuit.fallRateFps}
+                    onValueChange={(nextValue) =>
+                      setWingsuit(withCustomWingsuit({ ...wingsuit, fallRateFps: nextValue }))
+                    }
+                  />
+                </label>
+              </div>
+              <p className="status">
+                {t.currentWingsuitSummary(wingsuit.flightSpeedKt, wingsuit.fallRateFps, wingsuitGlideRatio)}
+              </p>
+            </section>
+          )}
 
           <section>
             <h2>{t.patternSettings}</h2>
@@ -946,13 +1216,13 @@ export default function App() {
             <div className="grid two">
               {gatesFt.map((gate, index) => (
                 <label key={index}>
-                  {t.gateLabel(index, altUnitLabel)}
+                  {t.gateLabel(mode, index, altUnitLabel)}
                   <NumberInput
                     value={Math.round(toDisplayFeet(unitSystem, gate))}
                     onValueChange={(nextValue) => {
                       const next = [...gatesFt] as [number, number, number, number];
                       next[index] = fromDisplayFeet(unitSystem, nextValue);
-                      setGates(next);
+                      setActiveGates(next);
                     }}
                   />
                 </label>
@@ -974,7 +1244,7 @@ export default function App() {
                     value={Math.round(toDisplayFeet(unitSystem, layer.altitudeFt))}
                     onValueChange={(nextValue) => {
                       const value = fromDisplayFeet(unitSystem, nextValue);
-                      updateWindLayer(layerIndex, { altitudeFt: value });
+                      updateActiveWindLayer(layerIndex, { altitudeFt: value });
                     }}
                   />
                 </label>
@@ -984,7 +1254,7 @@ export default function App() {
                     value={Number(toDisplayKnots(unitSystem, layer.speedKt).toFixed(1))}
                     onValueChange={(nextValue) => {
                       const value = fromDisplayKnots(unitSystem, nextValue);
-                      updateWindLayer(layerIndex, { speedKt: value, source: "manual" });
+                      updateActiveWindLayer(layerIndex, { speedKt: value, source: "manual" });
                     }}
                   />
                 </label>
@@ -993,7 +1263,7 @@ export default function App() {
                   <NumberInput
                     value={Math.round(layer.dirFromDeg)}
                     onValueChange={(nextValue) =>
-                      updateWindLayer(layerIndex, { dirFromDeg: nextValue, source: "manual" })
+                      updateActiveWindLayer(layerIndex, { dirFromDeg: nextValue, source: "manual" })
                     }
                   />
                 </label>
@@ -1003,11 +1273,14 @@ export default function App() {
 
           <section>
             <h2>{t.outputs}</h2>
+            {mode === "canopy" ? (
+              <p>
+                {t.wingLoading}: {wingLoading.toFixed(2)}
+              </p>
+            ) : null}
             <p>
-              {t.wingLoading}: {patternOutput.metrics.wingLoading.toFixed(2)}
-            </p>
-            <p>
-              {t.estAirspeed}: {toDisplayKnots(unitSystem, patternOutput.metrics.estAirspeedKt).toFixed(1)} {speedUnitLabel}
+              {mode === "canopy" ? t.estAirspeed : t.estFlightSpeed}:{" "}
+              {toDisplayKnots(unitSystem, patternOutput.metrics.estAirspeedKt).toFixed(1)} {speedUnitLabel}
             </p>
             {lastSurfaceWind ? (
               <p>
@@ -1019,13 +1292,17 @@ export default function App() {
                 )}
               </p>
             ) : null}
-            <p>
-              {t.speedModel(
-                canopy.airspeedRefKt.toFixed(1),
-                canopy.wlRef.toFixed(2),
-                (canopy.airspeedWlExponent ?? 0.5).toFixed(2),
-              )}
-            </p>
+            {mode === "canopy" ? (
+              <p>
+                {t.speedModel(
+                  canopy.airspeedRefKt.toFixed(1),
+                  canopy.wlRef.toFixed(2),
+                  (canopy.airspeedWlExponent ?? 0.5).toFixed(2),
+                )}
+              </p>
+            ) : (
+              <p>{t.wingsuitModel(wingsuit.name)}</p>
+            )}
             <p>{t.estSink(patternOutput.metrics.estSinkFps.toFixed(2))}</p>
             <p className={outputStatusClass}>{outputStatusText}</p>
             {patternOutput.warnings.length > 0 ? (
