@@ -138,6 +138,11 @@ body {
   font-size: 1.02rem;
 }
 
+.sidebar h3 {
+  margin: 10px 0 8px;
+  font-size: 0.92rem;
+}
+
 .row {
   display: flex;
   gap: 8px;
@@ -159,6 +164,62 @@ body {
 
 .grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact-grid {
+  align-items: start;
+}
+
+.control-cell {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.control-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.compact-options {
+  gap: 6px;
+}
+
+.option-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: white;
+  font-size: 0.82rem;
+}
+
+.option-chip input {
+  margin: 0;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.metric-card {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 0.82rem;
+  color: #0f172a;
 }
 
 label {
@@ -297,5 +358,9 @@ td {
   .map-shell,
   .map-fallback {
     min-height: 52vh;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
   }
 }

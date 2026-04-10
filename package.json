@@ -14,6 +14,7 @@
     "test": "npm run test --workspaces --if-present",
     "preview:lan": "npm run preview:lan --workspace @landing/web",
     "fixtures:engine": "npm run build --workspace @landing/ui-types && npm run build --workspace @landing/engine && node packages/fixtures/engine/generate-fixtures.mjs",
+    "fixtures:engine:auto": "npm run build --workspace @landing/ui-types && npm run build --workspace @landing/engine && node packages/fixtures/engine/generate-auto-fixtures.mjs",
     "ios:fixtures:sync": "npm run fixtures:engine && cp packages/fixtures/engine/fixtures.json apps/ios/LandingPatternCore/Tests/LandingPatternCoreTests/Fixtures/fixtures.json",
     "ios:core:test": "cd apps/ios/LandingPatternCore && swift test",
     "ios:project:generate": "cd apps/ios && xcodegen generate",

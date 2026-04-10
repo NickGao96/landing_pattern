@@ -1,0 +1,1374 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "auto_nominal_left",
+      "input": {
+        "landingPoint": {
+          "lat": 37,
+          "lng": -122
+        },
+        "jumpRun": {
+          "directionMode": "manual",
+          "manualHeadingDeg": 0,
+          "constraintMode": "none",
+          "constraintHeadingDeg": 0,
+          "assumptions": {
+            "planeAirspeedKt": 85,
+            "groupCount": 4,
+            "groupSeparationFt": 1500,
+            "slickDeployHeightFt": 3000,
+            "slickFallRateFps": 176,
+            "slickReturnRadiusFt": 5000
+          }
+        },
+        "side": "left",
+        "exitHeightFt": 12000,
+        "deployHeightFt": 4000,
+        "winds": [
+          {
+            "altitudeFt": 12000,
+            "speedKt": 20,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 8000,
+            "speedKt": 16,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 4000,
+            "speedKt": 12,
+            "dirFromDeg": 270,
+            "source": "manual"
+          }
+        ],
+        "wingsuit": {
+          "name": "Squirrel FREAK",
+          "flightSpeedKt": 84,
+          "fallRateFps": 68
+        },
+        "tuning": {
+          "corridorHalfWidthFt": 250,
+          "deployBearingWindowHalfDeg": 70,
+          "deployRadiusStepFt": 250,
+          "minDeployRadiusFt": 1000
+        }
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ]
+      },
+      "output": {
+        "blocked": true,
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated.",
+          "No deploy point returns exit to the resolved jump run; closest miss is 480 ft."
+        ],
+        "landingPoint": {
+          "name": "landing",
+          "lat": 37,
+          "lng": -122,
+          "altFt": 0
+        },
+        "resolvedJumpRun": {
+          "line": {
+            "start": {
+              "lat": 36.995879120879124,
+              "lng": -122.00181628469095
+            },
+            "end": {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095
+            }
+          },
+          "headingDeg": 0,
+          "lengthFt": 6000,
+          "crosswindOffsetFt": 528,
+          "planeGroundSpeedKt": 85,
+          "groupSpacingFt": 1500,
+          "groupSpacingSec": 10.455588725157812,
+          "slots": [
+            {
+              "lat": 37,
+              "lng": -122.00181628469095,
+              "label": "G1",
+              "index": 0,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.004120879120876,
+              "lng": -122.00181628469095,
+              "label": "G2",
+              "index": 1,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.00824175824176,
+              "lng": -122.00181628469095,
+              "label": "G3",
+              "index": 2,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095,
+              "label": "WS",
+              "index": 3,
+              "kind": "wingsuit",
+              "altFt": 12000
+            }
+          ]
+        },
+        "deployPoint": null,
+        "exitPoint": null,
+        "turnPoints": [],
+        "routeWaypoints": [],
+        "routeSegments": [],
+        "landingNoDeployZonePolygon": [
+          {
+            "lat": 37.002747252747255,
+            "lng": -122
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 37,
+            "lng": -121.9965600668732
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 36.997252747252745,
+            "lng": -122
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -122.00059733811877
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37,
+            "lng": -122.0034399331268
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -122.00059733811877
+          }
+        ],
+        "downwindDeployForbiddenZonePolygon": [
+          {
+            "lat": 37,
+            "lng": -122
+          },
+          {
+            "lat": 37.01802747252747,
+            "lng": -122
+          },
+          {
+            "lat": 37.01787324500092,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 37.017413201297,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 37.01665521289104,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 37.015612249174815,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 37.01430215554668,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 37.01274734807183,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 37.01097442993724,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 37.00901373626374,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 37.00689881506368,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 37.00466585322517,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 37.002353057344365,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 37,
+            "lng": -121.97742715882192
+          },
+          {
+            "lat": 36.997646942655635,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 36.99533414677483,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 36.99310118493632,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 36.99098626373626,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 36.98902557006276,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 36.98725265192817,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 36.98569784445332,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 36.984387750825185,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 36.98334478710896,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 36.982586798703,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 36.98212675499908,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 36.98197252747253,
+            "lng": -122
+          }
+        ],
+        "forbiddenZonePolygon": [
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00095630140925
+          },
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00095630140925
+          }
+        ],
+        "feasibleDeployRegionPolygon": [],
+        "deployBandsByBearing": [],
+        "diagnostics": {
+          "headingSource": "manual",
+          "constrainedHeadingApplied": false,
+          "resolvedHeadingDeg": 0,
+          "headwindComponentKt": -7.347880794884119e-16,
+          "crosswindComponentKt": -12,
+          "crosswindOffsetFt": 528,
+          "firstSlickReturnMarginFt": 5000,
+          "lastSlickReturnMarginFt": 2000,
+          "preferredDeployBearingDeg": 270,
+          "selectedDeployBearingDeg": 195.625,
+          "selectedDeployRadiusFt": 3687.5,
+          "exitToJumpRunErrorFt": 479.8934223445083,
+          "deployRadiusMarginFt": 2874.5,
+          "firstLegTrackDeltaDeg": 0,
+          "corridorMarginFt": 215.19144895422505,
+          "turnHeightsFt": [
+            10000,
+            10000
+          ],
+          "failureReason": "No deploy point returns exit to the resolved jump run; closest miss is 480 ft."
+        }
+      }
+    },
+    {
+      "name": "auto_custom_turn_ratios",
+      "input": {
+        "landingPoint": {
+          "lat": 37,
+          "lng": -122
+        },
+        "jumpRun": {
+          "directionMode": "manual",
+          "manualHeadingDeg": 0,
+          "constraintMode": "none",
+          "constraintHeadingDeg": 0,
+          "assumptions": {
+            "planeAirspeedKt": 85,
+            "groupCount": 4,
+            "groupSeparationFt": 1500,
+            "slickDeployHeightFt": 3000,
+            "slickFallRateFps": 176,
+            "slickReturnRadiusFt": 5000
+          }
+        },
+        "side": "left",
+        "exitHeightFt": 12000,
+        "deployHeightFt": 4000,
+        "winds": [
+          {
+            "altitudeFt": 12000,
+            "speedKt": 20,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 8000,
+            "speedKt": 16,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 4000,
+            "speedKt": 12,
+            "dirFromDeg": 270,
+            "source": "manual"
+          }
+        ],
+        "wingsuit": {
+          "name": "Squirrel FREAK",
+          "flightSpeedKt": 84,
+          "fallRateFps": 68
+        },
+        "tuning": {
+          "corridorHalfWidthFt": 250,
+          "deployBearingWindowHalfDeg": 70,
+          "deployRadiusStepFt": 250,
+          "minDeployRadiusFt": 1000
+        },
+        "turnRatios": {
+          "turn1": 0.6,
+          "turn2": 0.25
+        }
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ]
+      },
+      "output": {
+        "blocked": false,
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ],
+        "landingPoint": {
+          "name": "landing",
+          "lat": 37,
+          "lng": -122,
+          "altFt": 0
+        },
+        "resolvedJumpRun": {
+          "line": {
+            "start": {
+              "lat": 36.995879120879124,
+              "lng": -122.00181628469095
+            },
+            "end": {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095
+            }
+          },
+          "headingDeg": 0,
+          "lengthFt": 6000,
+          "crosswindOffsetFt": 528,
+          "planeGroundSpeedKt": 85,
+          "groupSpacingFt": 1500,
+          "groupSpacingSec": 10.455588725157812,
+          "slots": [
+            {
+              "lat": 37,
+              "lng": -122.00181628469095,
+              "label": "G1",
+              "index": 0,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.004120879120876,
+              "lng": -122.00181628469095,
+              "label": "G2",
+              "index": 1,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.00824175824176,
+              "lng": -122.00181628469095,
+              "label": "G3",
+              "index": 2,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095,
+              "label": "WS",
+              "index": 3,
+              "kind": "wingsuit",
+              "altFt": 12000
+            }
+          ]
+        },
+        "deployPoint": {
+          "name": "deploy",
+          "lat": 37.003094324343124,
+          "lng": -122.00271296380322,
+          "altFt": 4000
+        },
+        "exitPoint": {
+          "name": "exit",
+          "lat": 37.01223053662106,
+          "lng": -122.00271296380322,
+          "altFt": 12000
+        },
+        "turnPoints": [
+          {
+            "name": "turn1",
+            "lat": 37.030032593331214,
+            "lng": -122.00271296380322,
+            "altFt": 8800
+          },
+          {
+            "name": "turn2",
+            "lat": 37.030032593331214,
+            "lng": -122.00271296380322,
+            "altFt": 8800
+          }
+        ],
+        "routeWaypoints": [
+          {
+            "name": "exit",
+            "lat": 37.01223053662106,
+            "lng": -122.00271296380322,
+            "altFt": 12000
+          },
+          {
+            "name": "turn1",
+            "lat": 37.030032593331214,
+            "lng": -122.00271296380322,
+            "altFt": 8800
+          },
+          {
+            "name": "turn2",
+            "lat": 37.030032593331214,
+            "lng": -122.00271296380322,
+            "altFt": 8800
+          },
+          {
+            "name": "deploy",
+            "lat": 37.003094324343124,
+            "lng": -122.00271296380322,
+            "altFt": 4000
+          }
+        ],
+        "routeSegments": [
+          {
+            "name": "downwind",
+            "headingDeg": 346.2258530019733,
+            "trackHeadingDeg": 0,
+            "alongLegSpeedKt": 81.58431221748455,
+            "groundSpeedKt": 81.58431221748455,
+            "timeSec": 47.05882352941177,
+            "distanceFt": 6479.948642495455
+          },
+          {
+            "name": "final",
+            "headingDeg": 191.53695903281547,
+            "trackHeadingDeg": 180,
+            "alongLegSpeedKt": 82.30285535751479,
+            "groundSpeedKt": 82.30285535751479,
+            "timeSec": 70.58823529411765,
+            "distanceFt": 9805.52991166476
+          }
+        ],
+        "landingNoDeployZonePolygon": [
+          {
+            "lat": 37.002747252747255,
+            "lng": -122
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 37,
+            "lng": -121.9965600668732
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 36.997252747252745,
+            "lng": -122
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -122.00059733811877
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37,
+            "lng": -122.0034399331268
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -122.00059733811877
+          }
+        ],
+        "downwindDeployForbiddenZonePolygon": [
+          {
+            "lat": 37,
+            "lng": -122
+          },
+          {
+            "lat": 37.01802747252747,
+            "lng": -122
+          },
+          {
+            "lat": 37.01787324500092,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 37.017413201297,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 37.01665521289104,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 37.015612249174815,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 37.01430215554668,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 37.01274734807183,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 37.01097442993724,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 37.00901373626374,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 37.00689881506368,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 37.00466585322517,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 37.002353057344365,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 37,
+            "lng": -121.97742715882192
+          },
+          {
+            "lat": 36.997646942655635,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 36.99533414677483,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 36.99310118493632,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 36.99098626373626,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 36.98902557006276,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 36.98725265192817,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 36.98569784445332,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 36.984387750825185,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 36.98334478710896,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 36.982586798703,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 36.98212675499908,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 36.98197252747253,
+            "lng": -122
+          }
+        ],
+        "forbiddenZonePolygon": [
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00095630140925
+          },
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00095630140925
+          }
+        ],
+        "feasibleDeployRegionPolygon": [
+          {
+            "lat": 37.003094324343124,
+            "lng": -122.00271296380322
+          },
+          {
+            "lat": 37.003094324343124,
+            "lng": -122.00271296380322
+          }
+        ],
+        "deployBandsByBearing": [
+          {
+            "bearingDeg": 325,
+            "minRadiusFt": 1375,
+            "maxRadiusFt": 1375
+          }
+        ],
+        "diagnostics": {
+          "headingSource": "manual",
+          "constrainedHeadingApplied": false,
+          "resolvedHeadingDeg": 0,
+          "headwindComponentKt": -7.347880794884119e-16,
+          "crosswindComponentKt": -12,
+          "crosswindOffsetFt": 528,
+          "firstSlickReturnMarginFt": 5000,
+          "lastSlickReturnMarginFt": 2000,
+          "preferredDeployBearingDeg": 270,
+          "selectedDeployBearingDeg": 325,
+          "selectedDeployRadiusFt": 1375,
+          "exitToJumpRunErrorFt": 265.06552617150265,
+          "deployRadiusMarginFt": 5187,
+          "firstLegTrackDeltaDeg": 0,
+          "corridorMarginFt": 10.667599984345202,
+          "turnHeightsFt": [
+            8800,
+            8800
+          ],
+          "failureReason": null
+        }
+      }
+    },
+    {
+      "name": "auto_corridor_block",
+      "input": {
+        "landingPoint": {
+          "lat": 37,
+          "lng": -122
+        },
+        "jumpRun": {
+          "directionMode": "manual",
+          "manualHeadingDeg": 0,
+          "constraintMode": "none",
+          "constraintHeadingDeg": 0,
+          "assumptions": {
+            "planeAirspeedKt": 85,
+            "groupCount": 4,
+            "groupSeparationFt": 1500,
+            "slickDeployHeightFt": 3000,
+            "slickFallRateFps": 176,
+            "slickReturnRadiusFt": 5000
+          }
+        },
+        "side": "left",
+        "exitHeightFt": 12000,
+        "deployHeightFt": 4000,
+        "winds": [
+          {
+            "altitudeFt": 12000,
+            "speedKt": 20,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 8000,
+            "speedKt": 16,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 4000,
+            "speedKt": 12,
+            "dirFromDeg": 270,
+            "source": "manual"
+          }
+        ],
+        "wingsuit": {
+          "name": "Squirrel FREAK",
+          "flightSpeedKt": 84,
+          "fallRateFps": 68
+        },
+        "tuning": {
+          "corridorHalfWidthFt": 30000,
+          "deployBearingWindowHalfDeg": 70,
+          "deployRadiusStepFt": 250,
+          "minDeployRadiusFt": 1000
+        }
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ]
+      },
+      "output": {
+        "blocked": true,
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated.",
+          "No deploy point returns exit to the resolved jump run; closest miss is 8282 ft."
+        ],
+        "landingPoint": {
+          "name": "landing",
+          "lat": 37,
+          "lng": -122,
+          "altFt": 0
+        },
+        "resolvedJumpRun": {
+          "line": {
+            "start": {
+              "lat": 36.995879120879124,
+              "lng": -122.00181628469095
+            },
+            "end": {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095
+            }
+          },
+          "headingDeg": 0,
+          "lengthFt": 6000,
+          "crosswindOffsetFt": 528,
+          "planeGroundSpeedKt": 85,
+          "groupSpacingFt": 1500,
+          "groupSpacingSec": 10.455588725157812,
+          "slots": [
+            {
+              "lat": 37,
+              "lng": -122.00181628469095,
+              "label": "G1",
+              "index": 0,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.004120879120876,
+              "lng": -122.00181628469095,
+              "label": "G2",
+              "index": 1,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.00824175824176,
+              "lng": -122.00181628469095,
+              "label": "G3",
+              "index": 2,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095,
+              "label": "WS",
+              "index": 3,
+              "kind": "wingsuit",
+              "altFt": 12000
+            }
+          ]
+        },
+        "deployPoint": null,
+        "exitPoint": null,
+        "turnPoints": [],
+        "routeWaypoints": [],
+        "routeSegments": [],
+        "landingNoDeployZonePolygon": [
+          {
+            "lat": 37.002747252747255,
+            "lng": -122
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 37,
+            "lng": -121.9965600668732
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 36.997252747252745,
+            "lng": -122
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -122.00059733811877
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37,
+            "lng": -122.0034399331268
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -122.00059733811877
+          }
+        ],
+        "downwindDeployForbiddenZonePolygon": [
+          {
+            "lat": 37,
+            "lng": -122
+          },
+          {
+            "lat": 37.01802747252747,
+            "lng": -122
+          },
+          {
+            "lat": 37.01787324500092,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 37.017413201297,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 37.01665521289104,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 37.015612249174815,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 37.01430215554668,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 37.01274734807183,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 37.01097442993724,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 37.00901373626374,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 37.00689881506368,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 37.00466585322517,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 37.002353057344365,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 37,
+            "lng": -121.97742715882192
+          },
+          {
+            "lat": 36.997646942655635,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 36.99533414677483,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 36.99310118493632,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 36.99098626373626,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 36.98902557006276,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 36.98725265192817,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 36.98569784445332,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 36.984387750825185,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 36.98334478710896,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 36.982586798703,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 36.98212675499908,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 36.98197252747253,
+            "lng": -122
+          }
+        ],
+        "forbiddenZonePolygon": [
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.10501427849503
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.10501427849503
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -121.89861829088686
+          },
+          {
+            "lat": 36.96136813186814,
+            "lng": -121.89861829088686
+          }
+        ],
+        "feasibleDeployRegionPolygon": [],
+        "deployBandsByBearing": [],
+        "diagnostics": {
+          "headingSource": "manual",
+          "constrainedHeadingApplied": false,
+          "resolvedHeadingDeg": 0,
+          "headwindComponentKt": -7.347880794884119e-16,
+          "crosswindComponentKt": -12,
+          "crosswindOffsetFt": 528,
+          "firstSlickReturnMarginFt": 5000,
+          "lastSlickReturnMarginFt": 2000,
+          "preferredDeployBearingDeg": 270,
+          "selectedDeployBearingDeg": 337.5,
+          "selectedDeployRadiusFt": 4875,
+          "exitToJumpRunErrorFt": 8281.74697663134,
+          "deployRadiusMarginFt": 1687,
+          "firstLegTrackDeltaDeg": 0,
+          "corridorMarginFt": 3.912720993347648,
+          "turnHeightsFt": [
+            10000,
+            10000
+          ],
+          "failureReason": "No deploy point returns exit to the resolved jump run; closest miss is 8282 ft."
+        }
+      }
+    }
+  ]
+}

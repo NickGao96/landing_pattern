@@ -4,15 +4,24 @@ import MapKit
 import SwiftUI
 import LandingPatternCore
 
+enum WingsuitPlanningMode: String, Codable, CaseIterable {
+    case manual
+    case auto
+}
+
+private let defaultCoordinate = CLLocationCoordinate2D(latitude: 37.4419, longitude: -122.143)
+private let autoJumpRunHalfLengthFt: Double = 6000
+private let autoWindStepFt: Double = 250
+
 @MainActor
 final class LandingStore: ObservableObject {
     @Published var mode: FlightMode = .canopy {
         didSet { persistSettings() }
     }
-    @Published var touchdown = CLLocationCoordinate2D(latitude: 37.4419, longitude: -122.143) {
+    @Published var touchdown = defaultCoordinate {
         didSet { persistSettings() }
     }
-    @Published var location = CLLocationCoordinate2D(latitude: 37.4419, longitude: -122.143) {
+    @Published var location = defaultCoordinate {
         didSet { persistSettings() }
     }
     @Published var landingHeadingDeg: Double = 180 {
@@ -56,10 +65,37 @@ final class LandingStore: ObservableObject {
     @Published var wingsuitGatesFt: [Double] = defaultWingsuitGatesFt {
         didSet { persistSettings() }
     }
+    @Published var wingsuitPlanningMode: WingsuitPlanningMode = .manual {
+        didSet { persistSettings() }
+    }
     @Published var wingsuit: WingsuitProfile = wingsuitProfile(for: .freak) {
         didSet { persistSettings() }
     }
     @Published var wingsuitWindLayers: [WindLayer] = defaultWingsuitWindLayers {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoLandingPoint = defaultCoordinate {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoJumpRunStart = defaultJumpRun(around: defaultCoordinate).start {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoJumpRunEnd = defaultJumpRun(around: defaultCoordinate).end {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoExitHeightFt: Double = defaultWingsuitGatesFt.first ?? 12000 {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoDeployHeightFt: Double = defaultWingsuitGatesFt.last ?? 4000 {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoWindLayers: [WindLayer] = defaultDenseWingsuitAutoWindLayers {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoTurnRatios: WingsuitAutoTurnRatios? {
+        didSet { persistSettings() }
+    }
+    @Published var wingsuitAutoTuning: WingsuitAutoTuning? {
         didSet { persistSettings() }
     }
     @Published var language: AppLanguage = .en {
@@ -88,12 +124,19 @@ final class LandingStore: ObservableObject {
         restoreSettings()
     }
 
+    var isWingsuitAutoMode: Bool {
+        mode == .wingsuit && wingsuitPlanningMode == .auto
+    }
+
     var activeGatesFt: [Double] {
         mode == .canopy ? canopyGatesFt : wingsuitGatesFt
     }
 
     var activeWindLayers: [WindLayer] {
-        mode == .canopy ? canopyWindLayers : wingsuitWindLayers
+        if mode == .canopy {
+            return canopyWindLayers
+        }
+        return isWingsuitAutoMode ? wingsuitAutoWindLayers : wingsuitWindLayers
     }
 
     var patternInput: PatternInput {
@@ -105,7 +148,7 @@ final class LandingStore: ObservableObject {
             side: side,
             baseLegDrift: baseLegDrift,
             gatesFt: activeGatesFt,
-            winds: activeWindLayers,
+            winds: mode == .canopy ? canopyWindLayers : wingsuitWindLayers,
             canopy: canopy,
             jumper: JumperInput(exitWeightLb: exitWeightLb, canopyAreaSqft: canopy.sizeSqft),
             wingsuit: wingsuit
@@ -116,9 +159,72 @@ final class LandingStore: ObservableObject {
         computePattern(patternInput)
     }
 
+    var wingsuitAutoInput: WingsuitAutoInput {
+        WingsuitAutoInput(
+            landingPoint: geoPoint(from: wingsuitAutoLandingPoint),
+            jumpRun: JumpRunLine(
+                start: geoPoint(from: wingsuitAutoJumpRunStart),
+                end: geoPoint(from: wingsuitAutoJumpRunEnd)
+            ),
+            side: side,
+            exitHeightFt: wingsuitAutoExitHeightFt,
+            deployHeightFt: wingsuitAutoDeployHeightFt,
+            winds: wingsuitAutoWindLayers,
+            canopy: canopy,
+            jumper: JumperInput(exitWeightLb: exitWeightLb, canopyAreaSqft: canopy.sizeSqft),
+            wingsuit: wingsuit,
+            turnRatios: wingsuitAutoTurnRatios,
+            tuning: wingsuitAutoTuning
+        )
+    }
+
+    var wingsuitAutoOutput: WingsuitAutoOutput {
+        solveWingsuitAuto(wingsuitAutoInput)
+    }
+
     func setTouchdown(_ coordinate: CLLocationCoordinate2D) {
         touchdown = coordinate
         location = coordinate
+    }
+
+    func setPrimaryLocation(_ coordinate: CLLocationCoordinate2D, shiftJumpRun: Bool = false) {
+        if isWingsuitAutoMode {
+            setLandingPoint(coordinate, shiftJumpRun: shiftJumpRun)
+        } else {
+            setTouchdown(coordinate)
+        }
+    }
+
+    func setLandingPoint(_ coordinate: CLLocationCoordinate2D, shiftJumpRun: Bool = false) {
+        let previous = wingsuitAutoLandingPoint
+        wingsuitAutoLandingPoint = coordinate
+        location = coordinate
+        if shiftJumpRun {
+            let deltaLat = coordinate.latitude - previous.latitude
+            let deltaLng = coordinate.longitude - previous.longitude
+            wingsuitAutoJumpRunStart = CLLocationCoordinate2D(
+                latitude: wingsuitAutoJumpRunStart.latitude + deltaLat,
+                longitude: wingsuitAutoJumpRunStart.longitude + deltaLng
+            )
+            wingsuitAutoJumpRunEnd = CLLocationCoordinate2D(
+                latitude: wingsuitAutoJumpRunEnd.latitude + deltaLat,
+                longitude: wingsuitAutoJumpRunEnd.longitude + deltaLng
+            )
+        }
+    }
+
+    func setJumpRunStart(_ coordinate: CLLocationCoordinate2D) {
+        wingsuitAutoJumpRunStart = coordinate
+    }
+
+    func setJumpRunEnd(_ coordinate: CLLocationCoordinate2D) {
+        wingsuitAutoJumpRunEnd = coordinate
+    }
+
+    func reverseJumpRun() {
+        let currentStart = wingsuitAutoJumpRunStart
+        wingsuitAutoJumpRunStart = wingsuitAutoJumpRunEnd
+        wingsuitAutoJumpRunEnd = currentStart
     }
 
     func setHeadingFromHandle(_ coordinate: CLLocationCoordinate2D) {
@@ -130,6 +236,9 @@ final class LandingStore: ObservableObject {
         if mode == .canopy {
             guard canopyWindLayers.indices.contains(index) else { return }
             patch(&canopyWindLayers[index])
+        } else if isWingsuitAutoMode {
+            guard wingsuitAutoWindLayers.indices.contains(index) else { return }
+            patch(&wingsuitAutoWindLayers[index])
         } else {
             guard wingsuitWindLayers.indices.contains(index) else { return }
             patch(&wingsuitWindLayers[index])
@@ -177,22 +286,48 @@ final class LandingStore: ObservableObject {
             return
         }
 
-        let requestedAltitudes = requestedWindAltitudes(for: wingsuitGatesFt)
+        let requestedAltitudes: [Double]
+        let referenceCoordinate: CLLocationCoordinate2D
+        if isWingsuitAutoMode {
+            requestedAltitudes = weatherService.denseAltitudeProfile(
+                minAltitudeFt: 0,
+                maxAltitudeFt: wingsuitAutoExitHeightFt,
+                stepFt: autoWindStepFt
+            )
+            referenceCoordinate = wingsuitAutoLandingPoint
+        } else {
+            requestedAltitudes = requestedWindAltitudes(for: wingsuitGatesFt)
+            referenceCoordinate = touchdown
+        }
+
         do {
-            wingsuitWindLayers = try await weatherService.fetchWingsuitWindProfile(
-                lat: touchdown.latitude,
-                lng: touchdown.longitude,
+            let profile = try await weatherService.fetchWingsuitWindProfile(
+                lat: referenceCoordinate.latitude,
+                lng: referenceCoordinate.longitude,
                 altitudesFt: requestedAltitudes
             )
-            statusMessage = t.loadedUpperWind(wingsuitWindLayers.count)
+            if isWingsuitAutoMode {
+                wingsuitAutoWindLayers = profile
+            } else {
+                wingsuitWindLayers = profile
+            }
+            statusMessage = t.loadedUpperWind(profile.count)
         } catch {
             do {
-                let surface = try await weatherService.fetchSurfaceWind(lat: touchdown.latitude, lng: touchdown.longitude)
-                wingsuitWindLayers = weatherService.extrapolateWindProfile(
+                let surface = try await weatherService.fetchSurfaceWind(
+                    lat: referenceCoordinate.latitude,
+                    lng: referenceCoordinate.longitude
+                )
+                let profile = weatherService.extrapolateWindProfile(
                     surface: surface,
                     altitudesFt: requestedAltitudes,
                     alpha: shearAlpha
                 )
+                if isWingsuitAutoMode {
+                    wingsuitAutoWindLayers = profile
+                } else {
+                    wingsuitWindLayers = profile
+                }
                 statusMessage = t.loadedUpperWindFallback(error.localizedDescription)
             } catch {
                 statusMessage = t.autoWindFailed(error.localizedDescription)
@@ -209,7 +344,7 @@ final class LandingStore: ObservableObject {
 
         if let coordinate = parseCoordinateQuery(query) {
             searchResults = []
-            setTouchdown(coordinate)
+            setPrimaryLocation(coordinate, shiftJumpRun: true)
             statusMessage = t.locationSet(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude))
             print("[LocationSearch] Parsed coordinate query '\(query)' -> \(coordinate.latitude), \(coordinate.longitude)")
             return
@@ -230,7 +365,7 @@ final class LandingStore: ObservableObject {
                 let response = try await MKLocalSearch(request: request).start()
                 if let first = selectPreferredMapItem(from: response.mapItems, query: query) {
                     searchResults = response.mapItems
-                    setTouchdown(first.placemark.coordinate)
+                    setPrimaryLocation(first.placemark.coordinate, shiftJumpRun: true)
                     let locationName = first.name ?? t.selectedResult
                     statusMessage = t.locationSet("\(locationName) (\(String(format: "%.5f, %.5f", first.placemark.coordinate.latitude, first.placemark.coordinate.longitude)))")
                     print("[LocationSearch] MKLocalSearch '\(candidate)' -> \(locationName) @ \(first.placemark.coordinate.latitude), \(first.placemark.coordinate.longitude)")
@@ -246,7 +381,7 @@ final class LandingStore: ObservableObject {
                 let placemarks = try await CLGeocoder().geocodeAddressString(candidate)
                 if let coordinate = placemarks.first?.location?.coordinate {
                     searchResults = []
-                    setTouchdown(coordinate)
+                    setPrimaryLocation(coordinate, shiftJumpRun: true)
                     let locationName = placemarks.first?.name ?? t.selectedResult
                     statusMessage = t.locationSet("\(locationName) (\(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)))")
                     print("[LocationSearch] CLGeocoder '\(candidate)' -> \(locationName) @ \(coordinate.latitude), \(coordinate.longitude)")
@@ -262,7 +397,7 @@ final class LandingStore: ObservableObject {
                 if let fallback = try await fetchOpenMeteoLocation(query: candidate) {
                     searchResults = []
                     let coordinate = CLLocationCoordinate2D(latitude: fallback.latitude, longitude: fallback.longitude)
-                    setTouchdown(coordinate)
+                    setPrimaryLocation(coordinate, shiftJumpRun: true)
                     let place = [fallback.name, fallback.admin1, fallback.country].compactMap { $0 }.joined(separator: ", ")
                     statusMessage = t.locationSet("\(place) (\(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)))")
                     print("[LocationSearch] Open-Meteo fallback '\(candidate)' -> \(place) @ \(coordinate.latitude), \(coordinate.longitude)")
@@ -285,7 +420,11 @@ final class LandingStore: ObservableObject {
     }
 
     func applySearchResult(_ item: MKMapItem) {
-        setTouchdown(item.placemark.coordinate)
+        if isWingsuitAutoMode {
+            setLandingPoint(item.placemark.coordinate, shiftJumpRun: true)
+        } else {
+            setTouchdown(item.placemark.coordinate)
+        }
         statusMessage = t.locationSet(item.name ?? t.selectedResult)
     }
 
@@ -342,7 +481,20 @@ final class LandingStore: ObservableObject {
             wingsuitSettings: WingsuitSettingsSnapshot(
                 gatesFt: wingsuitGatesFt,
                 wingsuit: wingsuit,
-                windLayers: wingsuitWindLayers
+                windLayers: wingsuitWindLayers,
+                planningMode: wingsuitPlanningMode,
+                autoSettings: WingsuitAutoSettingsSnapshot(
+                    landingPoint: geoPoint(from: wingsuitAutoLandingPoint),
+                    jumpRun: JumpRunLine(
+                        start: geoPoint(from: wingsuitAutoJumpRunStart),
+                        end: geoPoint(from: wingsuitAutoJumpRunEnd)
+                    ),
+                    exitHeightFt: wingsuitAutoExitHeightFt,
+                    deployHeightFt: wingsuitAutoDeployHeightFt,
+                    windLayers: wingsuitAutoWindLayers,
+                    turnRatios: wingsuitAutoTurnRatios,
+                    tuning: wingsuitAutoTuning
+                )
             ),
             mapStackChoice: mapStackChoice,
             language: language
@@ -373,6 +525,17 @@ final class LandingStore: ObservableObject {
             wingsuitGatesFt = wingsuitSettings.gatesFt
             wingsuit = normalizedWingsuitProfile(wingsuitSettings.wingsuit)
             wingsuitWindLayers = wingsuitSettings.windLayers
+            wingsuitPlanningMode = wingsuitSettings.planningMode ?? .manual
+            if let autoSettings = wingsuitSettings.autoSettings {
+                wingsuitAutoLandingPoint = coordinate(from: autoSettings.landingPoint)
+                wingsuitAutoJumpRunStart = coordinate(from: autoSettings.jumpRun.start)
+                wingsuitAutoJumpRunEnd = coordinate(from: autoSettings.jumpRun.end)
+                wingsuitAutoExitHeightFt = autoSettings.exitHeightFt
+                wingsuitAutoDeployHeightFt = autoSettings.deployHeightFt
+                wingsuitAutoWindLayers = autoSettings.windLayers
+                wingsuitAutoTurnRatios = autoSettings.turnRatios
+                wingsuitAutoTuning = autoSettings.tuning
+            }
         }
 
         mode = snapshot.mode ?? .canopy
@@ -526,6 +689,18 @@ private struct WingsuitSettingsSnapshot: Codable {
     var gatesFt: [Double]
     var wingsuit: WingsuitProfile
     var windLayers: [WindLayer]
+    var planningMode: WingsuitPlanningMode?
+    var autoSettings: WingsuitAutoSettingsSnapshot?
+}
+
+private struct WingsuitAutoSettingsSnapshot: Codable {
+    var landingPoint: GeoPoint
+    var jumpRun: JumpRunLine
+    var exitHeightFt: Double
+    var deployHeightFt: Double
+    var windLayers: [WindLayer]
+    var turnRatios: WingsuitAutoTurnRatios?
+    var tuning: WingsuitAutoTuning?
 }
 
 private struct Snapshot: Codable {
@@ -546,4 +721,84 @@ private struct Snapshot: Codable {
     var windLayers: [WindLayer]?
     var mapStackChoice: MapStackChoice?
     var language: AppLanguage?
+}
+
+private let defaultDenseWingsuitAutoWindLayers: [WindLayer] = denseWindLayers(
+    from: defaultWingsuitWindLayers,
+    maxAltitudeFt: defaultWingsuitGatesFt.first ?? 12000,
+    stepFt: autoWindStepFt
+)
+
+private func denseWindLayers(from winds: [WindLayer], maxAltitudeFt: Double, stepFt: Double) -> [WindLayer] {
+    guard !winds.isEmpty, maxAltitudeFt.isFinite, stepFt.isFinite, stepFt > 0 else {
+        return winds
+    }
+
+    var layers: [WindLayer] = []
+    var altitude = 0.0
+    while altitude <= maxAltitudeFt {
+        if let layer = getWindForAltitude(altitude, winds: winds) {
+            layers.append(
+                WindLayer(
+                    altitudeFt: altitude,
+                    speedKt: layer.speedKt,
+                    dirFromDeg: layer.dirFromDeg,
+                    source: layer.source
+                )
+            )
+        }
+        altitude += stepFt
+    }
+
+    if layers.last.map({ abs($0.altitudeFt - maxAltitudeFt) > 1e-6 }) ?? true,
+       let finalLayer = getWindForAltitude(maxAltitudeFt, winds: winds) {
+        layers.append(
+            WindLayer(
+                altitudeFt: maxAltitudeFt,
+                speedKt: finalLayer.speedKt,
+                dirFromDeg: finalLayer.dirFromDeg,
+                source: finalLayer.source
+            )
+        )
+    }
+
+    return layers
+}
+
+private func geoPoint(from coordinate: CLLocationCoordinate2D) -> GeoPoint {
+    GeoPoint(lat: coordinate.latitude, lng: coordinate.longitude)
+}
+
+private func coordinate(from point: GeoPoint) -> CLLocationCoordinate2D {
+    CLLocationCoordinate2D(latitude: point.lat, longitude: point.lng)
+}
+
+private func defaultJumpRun(around center: CLLocationCoordinate2D) -> (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D) {
+    (
+        start: coordinate(atDistanceMeters: autoJumpRunHalfLengthFt * 0.3048, from: center, bearingDeg: 180),
+        end: coordinate(atDistanceMeters: autoJumpRunHalfLengthFt * 0.3048, from: center, bearingDeg: 0)
+    )
+}
+
+private func coordinate(
+    atDistanceMeters distanceMeters: CLLocationDistance,
+    from origin: CLLocationCoordinate2D,
+    bearingDeg: Double
+) -> CLLocationCoordinate2D {
+    let earthRadius = 6_378_137.0
+    let angularDistance = distanceMeters / earthRadius
+    let bearing = bearingDeg * .pi / 180
+    let lat1 = origin.latitude * .pi / 180
+    let lon1 = origin.longitude * .pi / 180
+
+    let lat2 = asin(sin(lat1) * cos(angularDistance) + cos(lat1) * sin(angularDistance) * cos(bearing))
+    let lon2 = lon1 + atan2(
+        sin(bearing) * sin(angularDistance) * cos(lat1),
+        cos(angularDistance) - sin(lat1) * sin(lat2)
+    )
+
+    return CLLocationCoordinate2D(
+        latitude: lat2 * 180 / .pi,
+        longitude: lon2 * 180 / .pi
+    )
 }

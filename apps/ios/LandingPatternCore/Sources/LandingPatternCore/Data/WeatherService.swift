@@ -64,6 +64,27 @@ public struct WeatherService {
         self.httpClient = httpClient
     }
 
+    public func denseAltitudeProfile(
+        minAltitudeFt: Double = 0,
+        maxAltitudeFt: Double,
+        stepFt: Double = 250
+    ) -> [Double] {
+        guard maxAltitudeFt.isFinite, stepFt.isFinite, maxAltitudeFt >= minAltitudeFt, stepFt > 0 else {
+            return []
+        }
+
+        var altitudes: [Double] = []
+        var current = minAltitudeFt
+        while current <= maxAltitudeFt {
+            altitudes.append(current)
+            current += stepFt
+        }
+        if altitudes.last.map({ abs($0 - maxAltitudeFt) > 1e-6 }) ?? true {
+            altitudes.append(maxAltitudeFt)
+        }
+        return altitudes
+    }
+
     public func fetchSurfaceWind(lat: Double, lng: Double) async throws -> SurfaceWind {
         try await fetchNoaaSurfaceWind(lat: lat, lng: lng)
     }
@@ -190,6 +211,21 @@ public struct WeatherService {
             }!
             return WindLayer(altitudeFt: altitudeFt, speedKt: nearest.speedKt, dirFromDeg: nearest.dirFromDeg, source: .auto)
         }
+    }
+
+    public func fetchDenseWingsuitWindProfile(
+        lat: Double,
+        lng: Double,
+        minAltitudeFt: Double = 0,
+        maxAltitudeFt: Double,
+        stepFt: Double = 250
+    ) async throws -> [WindLayer] {
+        let altitudes = denseAltitudeProfile(
+            minAltitudeFt: minAltitudeFt,
+            maxAltitudeFt: maxAltitudeFt,
+            stepFt: stepFt
+        )
+        return try await fetchWingsuitWindProfile(lat: lat, lng: lng, altitudesFt: altitudes)
     }
 
     public func extrapolateWindProfile(surface: SurfaceWind, altitudesFt: [Double], alpha: Double = 0.14) -> [WindLayer] {

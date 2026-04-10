@@ -9,6 +9,11 @@ Local-first skydiving landing-pattern simulator for planning downwind/base/final
 - Safety gating:
   - Blocks output when wing loading > 1.7.
   - Warns when final-leg wind penetration is too low.
+- Wingsuit auto mode:
+  - Lets the user pick a landing point, jump-run heading intent, and a left/right side.
+  - Resolves jump run automatically from heading intent, wind, and jump-run assumptions.
+  - Computes landing no-deploy, downwind deploy-forbidden, and jump-run corridor zones.
+  - Solves deploy/turn/exit automatically and only returns a route when exit comes back onto the resolved `WS` slot.
 - NOAA/NWS integration (`packages/data`):
   - Fetches surface wind from observations with forecast fallback.
   - Extrapolates 300/600/900 winds via configurable shear exponent.
@@ -122,6 +127,49 @@ Without this variable, the app stays tokenless.
 
 - This tool is a planning aid and intentionally does not model high-performance/swoop dynamics.
 - For strict environments where browser geolocation or NOAA fetch fails, manual location/wind entry remains available.
+
+## Wingsuit Auto Mode
+
+Wingsuit auto mode is the guided alternative to the manual pattern drawer.
+
+The user provides:
+
+- landing point
+- jump-run direction source
+  - `auto (headwind)`
+  - `manual`
+- optional reciprocal runway-pair constraint
+- left/right side relative to jump run
+- exit and deploy heights
+- wingsuit performance
+- wind layers
+- optional advanced jump-run assumptions
+  - plane airspeed
+  - group count
+  - group separation
+  - slick deploy height
+  - slick return radius
+
+From there, auto mode does the rest:
+
+- resolves jump-run heading from headwind or manual compass input
+- snaps that heading to a runway pair when a reciprocal constraint is enabled
+- computes aircraft ground speed and spacing time from the selected plane speed and winds aloft
+- uses a bounded spot table at slick deploy height to place the run after/before the LZ and a lighter crosswind table to offsite it
+- fits the normal-group span inside the configured slick return radius
+- derives a full resolved jump run and labeled slots (`G1`, `G2`, `G3`, `WS`)
+- uses the lowest wind layer to define the upwind deploy side
+- searches deploy only within 2 km of landing
+- renders a light downwind deploy-forbidden half-space
+- renders a small landing no-deploy circle
+- buffers jump run with a forbidden corridor
+- requires the first active leg to stay within 45° of jump-run direction
+- solves turn points and exit automatically
+- rejects any route that does not return exit to the resolved `WS` slot within tolerance
+
+If no solution satisfies those constraints, auto mode blocks and shows diagnostics instead of drawing a misleading pattern.
+
+Implementation details are documented in [docs/wingsuit-auto-mode.md](docs/wingsuit-auto-mode.md).
 
 ## Native iOS (SwiftUI V1)
 

@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CanopyProfile, FlightMode, PatternSide, WindLayer, WingsuitProfile } from "@landing/ui-types";
+import type {
+  CanopyProfile,
+  FlightMode,
+  PatternSide,
+  WindLayer,
+  WingsuitAutoJumpRunAssumptions,
+  WingsuitAutoJumpRunConstraintMode,
+  WingsuitAutoJumpRunDirectionMode,
+  WingsuitProfile,
+} from "@landing/ui-types";
 import { canopyPresets } from "@landing/data";
 import {
   defaultWingsuitGatesFt,
@@ -11,10 +20,16 @@ import {
 
 type UnitSystem = "imperial" | "metric";
 export type Language = "en" | "zh";
+export type WingsuitPlanningMode = "manual" | "auto";
 
 interface NamedSpot {
   id: string;
   name: string;
+  lat: number;
+  lng: number;
+}
+
+interface GeoPoint {
   lat: number;
   lng: number;
 }
@@ -32,6 +47,15 @@ export interface WingsuitSettings {
   windLayers: WindLayer[];
 }
 
+export interface WingsuitAutoSettings {
+  planningMode: WingsuitPlanningMode;
+  directionMode: WingsuitAutoJumpRunDirectionMode;
+  manualHeadingDeg: number;
+  constraintMode: WingsuitAutoJumpRunConstraintMode;
+  constraintHeadingDeg: number;
+  assumptions: Required<WingsuitAutoJumpRunAssumptions>;
+}
+
 interface AppStore {
   language: Language;
   unitSystem: UnitSystem;
@@ -41,16 +65,14 @@ interface AppStore {
     lng: number;
     source: "default" | "gps" | "manual";
   };
-  touchdown: {
-    lat: number;
-    lng: number;
-  };
+  touchdown: GeoPoint;
   landingHeadingDeg: number;
   side: PatternSide;
   baseLegDrift: boolean;
   shearAlpha: number;
   canopySettings: CanopySettings;
   wingsuitSettings: WingsuitSettings;
+  wingsuitAutoSettings: WingsuitAutoSettings;
   namedSpots: NamedSpot[];
   selectedSpotId: string | null;
   setMode: (mode: FlightMode) => void;
@@ -69,6 +91,12 @@ interface AppStore {
   setWingsuit: (wingsuit: WingsuitProfile) => void;
   setWingsuitWindLayers: (layers: WindLayer[]) => void;
   updateWingsuitWindLayer: (layerIndex: number, patch: Partial<WindLayer>) => void;
+  setWingsuitPlanningMode: (mode: WingsuitPlanningMode) => void;
+  setWingsuitAutoDirectionMode: (mode: WingsuitAutoJumpRunDirectionMode) => void;
+  setWingsuitAutoManualHeading: (headingDeg: number) => void;
+  setWingsuitAutoConstraintMode: (mode: WingsuitAutoJumpRunConstraintMode) => void;
+  setWingsuitAutoConstraintHeading: (headingDeg: number) => void;
+  setWingsuitAutoAssumptions: (patch: Partial<WingsuitAutoJumpRunAssumptions>) => void;
   setUnitSystem: (system: UnitSystem) => void;
   setLanguage: (language: Language) => void;
   saveNamedSpot: (name: string) => void;
@@ -77,6 +105,7 @@ interface AppStore {
 
 const defaultLat = 37.4419;
 const defaultLng = -122.143;
+const feetPerDegLat = 364000;
 
 const defaultPreset: CanopyProfile = canopyPresets[0] ?? {
   manufacturer: "Performance Designs",
@@ -111,6 +140,34 @@ const defaultWingsuitSettings: WingsuitSettings = {
   windLayers: defaultWingsuitWindLayers,
 };
 
+const defaultWingsuitAutoAssumptions: Required<WingsuitAutoJumpRunAssumptions> = {
+  planeAirspeedKt: 85,
+  groupCount: 4,
+  groupSeparationFt: 1500,
+  slickDeployHeightFt: 3000,
+  slickFallRateFps: 176,
+  slickReturnRadiusFt: 5000,
+};
+
+function normalizeHeading(deg: number): number {
+  return ((deg % 360) + 360) % 360;
+}
+
+function latLngToLocalFeet(refLat: number, refLng: number, lat: number, lng: number): { eastFt: number; northFt: number } {
+  const northFt = (lat - refLat) * feetPerDegLat;
+  const feetPerDegLng = feetPerDegLat * Math.max(Math.cos((refLat * Math.PI) / 180), 1e-5);
+  const eastFt = (lng - refLng) * feetPerDegLng;
+  return { eastFt, northFt };
+}
+
+function headingFromCoordinates(from: GeoPoint, to: GeoPoint): number {
+  const local = latLngToLocalFeet(from.lat, from.lng, to.lat, to.lng);
+  if (Math.hypot(local.eastFt, local.northFt) <= 1e-6) {
+    return 0;
+  }
+  return normalizeHeading((Math.atan2(local.eastFt, local.northFt) * 180) / Math.PI);
+}
+
 function updateWindLayerList(layers: WindLayer[], layerIndex: number, patch: Partial<WindLayer>): WindLayer[] {
   return layers.map((layer, index) =>
     index === layerIndex
@@ -121,6 +178,73 @@ function updateWindLayerList(layers: WindLayer[], layerIndex: number, patch: Par
       : layer,
   );
 }
+
+function normalizePersistedAssumptions(
+  assumptions: Partial<WingsuitAutoJumpRunAssumptions> | undefined,
+): Required<WingsuitAutoJumpRunAssumptions> {
+  return {
+    planeAirspeedKt:
+      typeof assumptions?.planeAirspeedKt === "number"
+        ? assumptions.planeAirspeedKt
+        : defaultWingsuitAutoAssumptions.planeAirspeedKt,
+    groupCount:
+      typeof assumptions?.groupCount === "number"
+        ? Math.max(2, Math.round(assumptions.groupCount))
+        : defaultWingsuitAutoAssumptions.groupCount,
+    groupSeparationFt:
+      typeof assumptions?.groupSeparationFt === "number"
+        ? assumptions.groupSeparationFt
+        : defaultWingsuitAutoAssumptions.groupSeparationFt,
+    slickDeployHeightFt:
+      typeof assumptions?.slickDeployHeightFt === "number"
+        ? assumptions.slickDeployHeightFt
+        : defaultWingsuitAutoAssumptions.slickDeployHeightFt,
+    slickFallRateFps:
+      typeof assumptions?.slickFallRateFps === "number"
+        ? assumptions.slickFallRateFps
+        : defaultWingsuitAutoAssumptions.slickFallRateFps,
+    slickReturnRadiusFt:
+      typeof assumptions?.slickReturnRadiusFt === "number"
+        ? assumptions.slickReturnRadiusFt
+        : defaultWingsuitAutoAssumptions.slickReturnRadiusFt,
+  };
+}
+
+function normalizePersistedAutoSettings(
+  value: Partial<WingsuitAutoSettings> & {
+    jumpRun?: { start?: GeoPoint; end?: GeoPoint };
+  },
+): WingsuitAutoSettings {
+  const legacyHeadingDeg =
+    value.jumpRun?.start && value.jumpRun?.end
+      ? headingFromCoordinates(value.jumpRun.start, value.jumpRun.end)
+      : 0;
+
+  return {
+    planningMode: value.planningMode === "auto" ? "auto" : "manual",
+    directionMode:
+      value.directionMode === "manual" || value.directionMode === "auto"
+        ? value.directionMode
+        : value.jumpRun
+          ? "manual"
+          : "auto",
+    manualHeadingDeg:
+      typeof value.manualHeadingDeg === "number" ? normalizeHeading(value.manualHeadingDeg) : legacyHeadingDeg,
+    constraintMode: value.constraintMode === "reciprocal" ? "reciprocal" : "none",
+    constraintHeadingDeg:
+      typeof value.constraintHeadingDeg === "number" ? normalizeHeading(value.constraintHeadingDeg) : 0,
+    assumptions: normalizePersistedAssumptions(value.assumptions),
+  };
+}
+
+const defaultWingsuitAutoSettings: WingsuitAutoSettings = {
+  planningMode: "manual",
+  directionMode: "auto",
+  manualHeadingDeg: 0,
+  constraintMode: "none",
+  constraintHeadingDeg: 0,
+  assumptions: defaultWingsuitAutoAssumptions,
+};
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -136,6 +260,7 @@ export const useAppStore = create<AppStore>()(
       shearAlpha: 0.14,
       canopySettings: defaultCanopySettings,
       wingsuitSettings: defaultWingsuitSettings,
+      wingsuitAutoSettings: defaultWingsuitAutoSettings,
       namedSpots: [],
       selectedSpotId: null,
       setMode: (mode) =>
@@ -229,6 +354,51 @@ export const useAppStore = create<AppStore>()(
             windLayers: updateWindLayerList(state.wingsuitSettings.windLayers, layerIndex, patch),
           },
         })),
+      setWingsuitPlanningMode: (planningMode) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            planningMode,
+          },
+        })),
+      setWingsuitAutoDirectionMode: (directionMode) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            directionMode,
+          },
+        })),
+      setWingsuitAutoManualHeading: (manualHeadingDeg) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            manualHeadingDeg: normalizeHeading(manualHeadingDeg),
+          },
+        })),
+      setWingsuitAutoConstraintMode: (constraintMode) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            constraintMode,
+          },
+        })),
+      setWingsuitAutoConstraintHeading: (constraintHeadingDeg) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            constraintHeadingDeg: normalizeHeading(constraintHeadingDeg),
+          },
+        })),
+      setWingsuitAutoAssumptions: (patch) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            assumptions: normalizePersistedAssumptions({
+              ...state.wingsuitAutoSettings.assumptions,
+              ...patch,
+            }),
+          },
+        })),
       setUnitSystem: (system) =>
         set(() => ({
           unitSystem: system,
@@ -265,7 +435,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "landing-pattern-store-v1",
-      version: 2,
+      version: 4,
       migrate: (persistedState: unknown, version) => {
         const state = (persistedState ?? {}) as Partial<AppStore> & {
           gatesFt?: [number, number, number, number];
@@ -274,29 +444,7 @@ export const useAppStore = create<AppStore>()(
           windLayers?: WindLayer[];
         };
 
-        if (version >= 1 && state.canopySettings && state.wingsuitSettings) {
-          return {
-            language: state.language ?? "en",
-            unitSystem: state.unitSystem ?? "imperial",
-            mode: state.mode === "wingsuit" ? "wingsuit" : "canopy",
-            location: state.location ?? { lat: defaultLat, lng: defaultLng, source: "default" },
-            touchdown: state.touchdown ?? { lat: defaultLat, lng: defaultLng },
-            landingHeadingDeg: state.landingHeadingDeg ?? 180,
-            side: state.side ?? "left",
-            baseLegDrift: state.baseLegDrift ?? true,
-            shearAlpha: state.shearAlpha ?? 0.14,
-            canopySettings: state.canopySettings,
-            wingsuitSettings: {
-              ...defaultWingsuitSettings,
-              ...state.wingsuitSettings,
-              wingsuit: normalizeWingsuitProfile(state.wingsuitSettings.wingsuit),
-            },
-            namedSpots: state.namedSpots ?? [],
-            selectedSpotId: state.selectedSpotId ?? null,
-          };
-        }
-
-        return {
+        const migrated = {
           language: state.language ?? "en",
           unitSystem: state.unitSystem ?? "imperial",
           mode: state.mode === "wingsuit" ? "wingsuit" : "canopy",
@@ -306,16 +454,33 @@ export const useAppStore = create<AppStore>()(
           side: state.side ?? "left",
           baseLegDrift: state.baseLegDrift ?? true,
           shearAlpha: state.shearAlpha ?? 0.14,
-          canopySettings: state.canopySettings ?? {
-            gatesFt: state.gatesFt ?? defaultCanopySettings.gatesFt,
-            canopy: state.canopy ?? defaultCanopySettings.canopy,
-            exitWeightLb: state.exitWeightLb ?? defaultCanopySettings.exitWeightLb,
-            windLayers: state.windLayers ?? defaultCanopySettings.windLayers,
-          },
-          wingsuitSettings: state.wingsuitSettings ?? defaultWingsuitSettings,
+          canopySettings:
+            version >= 1 && state.canopySettings
+              ? state.canopySettings
+              : {
+                  gatesFt: state.gatesFt ?? defaultCanopySettings.gatesFt,
+                  canopy: state.canopy ?? defaultCanopySettings.canopy,
+                  exitWeightLb: state.exitWeightLb ?? defaultCanopySettings.exitWeightLb,
+                  windLayers: state.windLayers ?? defaultCanopySettings.windLayers,
+                },
+          wingsuitSettings:
+            version >= 1 && state.wingsuitSettings
+              ? {
+                  ...defaultWingsuitSettings,
+                  ...state.wingsuitSettings,
+                  wingsuit: normalizeWingsuitProfile(state.wingsuitSettings.wingsuit),
+                }
+              : defaultWingsuitSettings,
+          wingsuitAutoSettings: normalizePersistedAutoSettings(
+            (state.wingsuitAutoSettings as Partial<WingsuitAutoSettings> & {
+              jumpRun?: { start?: GeoPoint; end?: GeoPoint };
+            }) ?? defaultWingsuitAutoSettings,
+          ),
           namedSpots: state.namedSpots ?? [],
           selectedSpotId: state.selectedSpotId ?? null,
         };
+
+        return migrated;
       },
       partialize: (state) => ({
         language: state.language,
@@ -329,6 +494,7 @@ export const useAppStore = create<AppStore>()(
         shearAlpha: state.shearAlpha,
         canopySettings: state.canopySettings,
         wingsuitSettings: state.wingsuitSettings,
+        wingsuitAutoSettings: state.wingsuitAutoSettings,
         namedSpots: state.namedSpots,
         selectedSpotId: state.selectedSpotId,
       }),

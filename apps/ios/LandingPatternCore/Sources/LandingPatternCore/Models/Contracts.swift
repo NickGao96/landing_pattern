@@ -262,3 +262,212 @@ public struct SurfaceWind: Codable, Equatable {
         self.observationTime = observationTime
     }
 }
+
+public struct GeoPoint: Codable, Equatable {
+    public var lat: Double
+    public var lng: Double
+
+    public init(lat: Double, lng: Double) {
+        self.lat = lat
+        self.lng = lng
+    }
+}
+
+public struct JumpRunLine: Codable, Equatable {
+    public var start: GeoPoint
+    public var end: GeoPoint
+
+    public init(start: GeoPoint, end: GeoPoint) {
+        self.start = start
+        self.end = end
+    }
+}
+
+public struct WingsuitAutoTurnRatios: Codable, Equatable {
+    public var turn1: Double
+    public var turn2: Double
+
+    public init(turn1: Double, turn2: Double) {
+        self.turn1 = turn1
+        self.turn2 = turn2
+    }
+}
+
+public struct WingsuitAutoTuning: Codable, Equatable {
+    public var corridorHalfWidthFt: Double?
+    public var canopySweepStepDeg: Double?
+    public var deployBearingStepDeg: Double?
+    public var deployRadiusStepFt: Double?
+    public var deployBearingWindowHalfDeg: Double?
+    public var minDeployRadiusFt: Double?
+    public var refinementIterations: Double?
+    public var exitOnJumpRunToleranceFt: Double?
+
+    public init(
+        corridorHalfWidthFt: Double? = nil,
+        canopySweepStepDeg: Double? = nil,
+        deployBearingStepDeg: Double? = nil,
+        deployRadiusStepFt: Double? = nil,
+        deployBearingWindowHalfDeg: Double? = nil,
+        minDeployRadiusFt: Double? = nil,
+        refinementIterations: Double? = nil,
+        exitOnJumpRunToleranceFt: Double? = nil
+    ) {
+        self.corridorHalfWidthFt = corridorHalfWidthFt
+        self.canopySweepStepDeg = canopySweepStepDeg
+        self.deployBearingStepDeg = deployBearingStepDeg
+        self.deployRadiusStepFt = deployRadiusStepFt
+        self.deployBearingWindowHalfDeg = deployBearingWindowHalfDeg
+        self.minDeployRadiusFt = minDeployRadiusFt
+        self.refinementIterations = refinementIterations
+        self.exitOnJumpRunToleranceFt = exitOnJumpRunToleranceFt
+    }
+}
+
+public struct WingsuitAutoInput: Codable, Equatable {
+    public var landingPoint: GeoPoint
+    public var jumpRun: JumpRunLine
+    public var side: PatternSide
+    public var exitHeightFt: Double
+    public var deployHeightFt: Double
+    public var winds: [WindLayer]
+    public var canopy: CanopyProfile
+    public var jumper: JumperInput
+    public var wingsuit: WingsuitProfile
+    public var turnRatios: WingsuitAutoTurnRatios?
+    public var tuning: WingsuitAutoTuning?
+
+    public init(
+        landingPoint: GeoPoint,
+        jumpRun: JumpRunLine,
+        side: PatternSide,
+        exitHeightFt: Double,
+        deployHeightFt: Double,
+        winds: [WindLayer],
+        canopy: CanopyProfile,
+        jumper: JumperInput,
+        wingsuit: WingsuitProfile,
+        turnRatios: WingsuitAutoTurnRatios? = nil,
+        tuning: WingsuitAutoTuning? = nil
+    ) {
+        self.landingPoint = landingPoint
+        self.jumpRun = jumpRun
+        self.side = side
+        self.exitHeightFt = exitHeightFt
+        self.deployHeightFt = deployHeightFt
+        self.winds = winds
+        self.canopy = canopy
+        self.jumper = jumper
+        self.wingsuit = wingsuit
+        self.turnRatios = turnRatios
+        self.tuning = tuning
+    }
+}
+
+public enum WingsuitAutoWaypointName: String, Codable, CaseIterable {
+    case landing
+    case deploy
+    case turn2
+    case turn1
+    case exit
+}
+
+public struct WingsuitAutoWaypoint: Codable, Equatable {
+    public var name: WingsuitAutoWaypointName
+    public var lat: Double
+    public var lng: Double
+    public var altFt: Double
+
+    public init(name: WingsuitAutoWaypointName, lat: Double, lng: Double, altFt: Double) {
+        self.name = name
+        self.lat = lat
+        self.lng = lng
+        self.altFt = altFt
+    }
+}
+
+public struct RadiusBand: Codable, Equatable {
+    public var bearingDeg: Double
+    public var minRadiusFt: Double
+    public var maxRadiusFt: Double
+
+    public init(bearingDeg: Double, minRadiusFt: Double, maxRadiusFt: Double) {
+        self.bearingDeg = bearingDeg
+        self.minRadiusFt = minRadiusFt
+        self.maxRadiusFt = maxRadiusFt
+    }
+}
+
+public struct WingsuitAutoDiagnostics: Codable, Equatable {
+    public var preferredDeployBearingDeg: Double?
+    public var selectedDeployBearingDeg: Double?
+    public var selectedDeployRadiusFt: Double?
+    public var exitToJumpRunErrorFt: Double?
+    public var deployEnvelopeMarginFt: Double?
+    public var corridorMarginFt: Double?
+    public var turnHeightsFt: [Double]?
+    public var failureReason: String?
+
+    public init(
+        preferredDeployBearingDeg: Double? = nil,
+        selectedDeployBearingDeg: Double? = nil,
+        selectedDeployRadiusFt: Double? = nil,
+        exitToJumpRunErrorFt: Double? = nil,
+        deployEnvelopeMarginFt: Double? = nil,
+        corridorMarginFt: Double? = nil,
+        turnHeightsFt: [Double]? = nil,
+        failureReason: String? = nil
+    ) {
+        self.preferredDeployBearingDeg = preferredDeployBearingDeg
+        self.selectedDeployBearingDeg = selectedDeployBearingDeg
+        self.selectedDeployRadiusFt = selectedDeployRadiusFt
+        self.exitToJumpRunErrorFt = exitToJumpRunErrorFt
+        self.deployEnvelopeMarginFt = deployEnvelopeMarginFt
+        self.corridorMarginFt = corridorMarginFt
+        self.turnHeightsFt = turnHeightsFt
+        self.failureReason = failureReason
+    }
+}
+
+public struct WingsuitAutoOutput: Codable, Equatable {
+    public var blocked: Bool
+    public var warnings: [String]
+    public var landingPoint: WingsuitAutoWaypoint
+    public var deployPoint: WingsuitAutoWaypoint?
+    public var exitPoint: WingsuitAutoWaypoint?
+    public var turnPoints: [WingsuitAutoWaypoint]
+    public var routeWaypoints: [WingsuitAutoWaypoint]
+    public var routeSegments: [SegmentOutput]
+    public var forbiddenZonePolygon: [GeoPoint]
+    public var feasibleDeployRegionPolygon: [GeoPoint]
+    public var deployBandsByBearing: [RadiusBand]
+    public var diagnostics: WingsuitAutoDiagnostics
+
+    public init(
+        blocked: Bool,
+        warnings: [String],
+        landingPoint: WingsuitAutoWaypoint,
+        deployPoint: WingsuitAutoWaypoint?,
+        exitPoint: WingsuitAutoWaypoint?,
+        turnPoints: [WingsuitAutoWaypoint],
+        routeWaypoints: [WingsuitAutoWaypoint],
+        routeSegments: [SegmentOutput],
+        forbiddenZonePolygon: [GeoPoint],
+        feasibleDeployRegionPolygon: [GeoPoint],
+        deployBandsByBearing: [RadiusBand],
+        diagnostics: WingsuitAutoDiagnostics
+    ) {
+        self.blocked = blocked
+        self.warnings = warnings
+        self.landingPoint = landingPoint
+        self.deployPoint = deployPoint
+        self.exitPoint = exitPoint
+        self.turnPoints = turnPoints
+        self.routeWaypoints = routeWaypoints
+        self.routeSegments = routeSegments
+        self.forbiddenZonePolygon = forbiddenZonePolygon
+        self.feasibleDeployRegionPolygon = feasibleDeployRegionPolygon
+        self.deployBandsByBearing = deployBandsByBearing
+        self.diagnostics = diagnostics
+    }
+}

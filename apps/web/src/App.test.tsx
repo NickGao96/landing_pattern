@@ -56,6 +56,21 @@ beforeEach(async () => {
         { altitudeFt: 6500, speedKt: 18, dirFromDeg: 220, source: "manual" },
       ],
     },
+    wingsuitAutoSettings: {
+      planningMode: "manual",
+      directionMode: "auto",
+      manualHeadingDeg: 0,
+      constraintMode: "none",
+      constraintHeadingDeg: 0,
+      assumptions: {
+        planeAirspeedKt: 85,
+        groupCount: 4,
+        groupSeparationFt: 1500,
+        slickDeployHeightFt: 3000,
+        slickFallRateFps: 176,
+        slickReturnRadiusFt: 5000,
+      },
+    },
     namedSpots: [],
     selectedSpotId: null,
   });
@@ -179,6 +194,55 @@ describe("App", () => {
     expect(screen.getByLabelText("Horizontal Speed (kt)")).toHaveValue(60);
     expect(screen.getByLabelText("Fall Rate (ft/s)")).toHaveValue(84);
     expect(screen.getByLabelText("Wingsuit Name")).toHaveValue("Squirrel SWIFT");
+  });
+
+  it("shows wingsuit auto controls and diagnostics", () => {
+    renderApp();
+
+    fireEvent.click(screen.getByLabelText("Wingsuit"));
+    fireEvent.click(screen.getByLabelText("Auto Mode"));
+
+    expect(screen.getByText("Landing Point")).toBeInTheDocument();
+    expect(screen.getByLabelText("Exit Height (ft)")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Jump Run Start Lat")).not.toBeInTheDocument();
+    expect(screen.getByText("Direction Source")).toBeInTheDocument();
+    expect(screen.getByLabelText("Auto (Headwind)")).toBeInTheDocument();
+    expect(screen.getByText("Airport Constraint")).toBeInTheDocument();
+    expect(screen.getByText("Advanced Jump-Run Assumptions")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Jump Run Direction (deg)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Manual"));
+    expect(screen.getByLabelText("Jump Run Direction (deg)")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Runway Heading (deg)")).not.toBeInTheDocument();
+    expect(screen.getByText(/Preferred Deploy Bearing/)).toBeInTheDocument();
+    expect(screen.getByText(/Deploy Radius Margin/)).toBeInTheDocument();
+    expect(screen.getByText(/First Leg Track Delta/)).toBeInTheDocument();
+    expect(screen.getByText(/crosswind offsite, group spacing, run length/i)).toBeInTheDocument();
+  });
+
+  it("keeps language and units in one display section", () => {
+    renderApp();
+
+    expect(screen.getByRole("heading", { name: "Display" })).toBeInTheDocument();
+    expect(screen.getByText("Language")).toBeInTheDocument();
+    expect(screen.getByText("Units")).toBeInTheDocument();
+  });
+
+  it("stores jump-run intent and assumptions independently of landing moves", () => {
+    const state = useAppStore.getState();
+    state.setWingsuitAutoDirectionMode("manual");
+    state.setWingsuitAutoManualHeading(33);
+    state.setWingsuitAutoConstraintMode("reciprocal");
+    state.setWingsuitAutoConstraintHeading(180);
+    state.setWingsuitAutoAssumptions({ groupCount: 5, groupSeparationFt: 1800 });
+    state.setTouchdown(37.6, -122.143);
+
+    const nextState = useAppStore.getState();
+    expect(nextState.wingsuitAutoSettings.directionMode).toBe("manual");
+    expect(nextState.wingsuitAutoSettings.manualHeadingDeg).toBe(33);
+    expect(nextState.wingsuitAutoSettings.constraintMode).toBe("reciprocal");
+    expect(nextState.wingsuitAutoSettings.constraintHeadingDeg).toBe(180);
+    expect(nextState.wingsuitAutoSettings.assumptions.groupCount).toBe(5);
+    expect(nextState.wingsuitAutoSettings.assumptions.groupSeparationFt).toBe(1800);
   });
 
   it("imports legacy canopy snapshots into canopy mode", async () => {

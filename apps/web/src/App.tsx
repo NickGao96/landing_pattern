@@ -2,18 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, InputHTMLAttributes } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { canopyPresets, extrapolateWindProfile, fetchNoaaSurfaceWind, fetchWingsuitWindProfile } from "@landing/data";
-import { computePattern } from "@landing/engine";
+import { computePattern, solveWingsuitAuto } from "@landing/engine";
 import type {
   CanopyProfile,
   FlightMode,
   PatternInput,
   SurfaceWind,
   WindLayer,
+  WingsuitAutoInput,
+  WingsuitAutoOutput,
+  WingsuitAutoJumpRunAssumptions,
   WingsuitPresetId,
   WingsuitProfile,
 } from "@landing/ui-types";
 import { feetToMeters, knotsToMps, metersToFeet, mpsToKnots } from "./lib/units";
-import { type Language, useAppStore } from "./store";
+import { type Language, type WingsuitPlanningMode, useAppStore } from "./store";
 import { MapPanel } from "./components/MapPanel";
 import { glideRatioForWingsuit, normalizeWingsuitProfile, wingsuitProfileForPreset, withCustomWingsuit } from "./wingsuits";
 
@@ -147,9 +150,73 @@ function buildPatternInput(state: {
   };
 }
 
-function getRequestedWindAltitudes(mode: FlightMode, gatesFt: [number, number, number, number]): number[] {
+function deriveWingsuitAutoTurnRatios(gatesFt: [number, number, number, number]):
+  | { turn1: number; turn2: number }
+  | undefined {
+  const [exitFt, turn1Ft, turn2Ft, deployFt] = gatesFt;
+  const spanFt = exitFt - deployFt;
+  if (!Number.isFinite(spanFt) || spanFt <= 0) {
+    return undefined;
+  }
+
+  const turn1 = (turn1Ft - deployFt) / spanFt;
+  const turn2 = (turn2Ft - deployFt) / spanFt;
+  if (!(turn1 < 1 && turn1 > turn2 && turn2 > 0)) {
+    return undefined;
+  }
+
+  return { turn1, turn2 };
+}
+
+function buildWingsuitAutoInput(state: {
+  landingPoint: { lat: number; lng: number };
+  jumpRun: {
+    directionMode: "auto" | "manual";
+    manualHeadingDeg: number;
+    constraintMode: "none" | "reciprocal";
+    constraintHeadingDeg: number;
+    assumptions: Required<WingsuitAutoJumpRunAssumptions>;
+  };
+  side: "left" | "right";
+  wingsuitSettings: {
+    gatesFt: [number, number, number, number];
+    windLayers: WindLayer[];
+    wingsuit: WingsuitProfile;
+  };
+}): WingsuitAutoInput {
+  return {
+    landingPoint: state.landingPoint,
+    jumpRun: state.jumpRun,
+    side: state.side,
+    exitHeightFt: state.wingsuitSettings.gatesFt[0],
+    deployHeightFt: state.wingsuitSettings.gatesFt[3],
+    winds: state.wingsuitSettings.windLayers,
+    wingsuit: state.wingsuitSettings.wingsuit,
+    turnRatios: deriveWingsuitAutoTurnRatios(state.wingsuitSettings.gatesFt),
+  };
+}
+
+function getRequestedWingsuitAutoWindAltitudes(exitHeightFt: number, deployHeightFt: number): number[] {
+  const lowFt = Math.max(0, Math.min(exitHeightFt, deployHeightFt));
+  const highFt = Math.max(exitHeightFt, deployHeightFt);
+  const values = new Set<number>([0, lowFt, highFt]);
+  for (let altitudeFt = 2000; altitudeFt < highFt; altitudeFt += 2000) {
+    values.add(altitudeFt);
+  }
+  return [...values].sort((a, b) => b - a);
+}
+
+function getRequestedWindAltitudes(
+  mode: FlightMode,
+  gatesFt: [number, number, number, number],
+  wingsuitPlanningMode: WingsuitPlanningMode,
+): number[] {
   if (mode === "canopy") {
     return [gatesFt[0], gatesFt[1], gatesFt[2]];
+  }
+
+  if (wingsuitPlanningMode === "auto") {
+    return getRequestedWingsuitAutoWindAltitudes(gatesFt[0], gatesFt[3]);
   }
 
   const activeAltitudes: number[] = [];
@@ -163,6 +230,15 @@ function getRequestedWindAltitudes(mode: FlightMode, gatesFt: [number, number, n
     activeAltitudes.push(gatesFt[2]);
   }
   return activeAltitudes;
+}
+
+function headingFromCoordinates(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const y = Math.sin(deltaLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+  return normalizeHeading((Math.atan2(y, x) * 180) / Math.PI);
 }
 
 function exportSnapshot(data: unknown): void {
@@ -200,13 +276,17 @@ const translations = {
     title: "Flight Pattern Simulator",
     planningNote:
       "Planning aid only. Not operational guidance. Always follow DZ procedures, traffic, and instructor/coach input.",
+    displaySection: "Display",
     languageSection: "Language",
     languageEnglish: "English",
     languageChinese: "中文",
     unitsSection: "Units",
     imperial: "Imperial",
     metric: "Metric",
+    yes: "Yes",
+    no: "No",
     touchdownSpot: "Touchdown Spot",
+    landingPoint: "Landing Point",
     useBrowserLocation: "Use Browser Location",
     loadingWind: "Loading Wind...",
     fetchNoaaWind: "Fetch NOAA Wind",
@@ -216,12 +296,16 @@ const translations = {
     lat: "Lat",
     lng: "Lng",
     applyTouchdown: "Apply Touchdown",
+    applyLandingPoint: "Apply Landing Point",
     spotNamePlaceholder: "Spot name",
     saveSpot: "Save Spot",
     selectSavedSpot: "Select saved spot",
     modeSection: "Flight Mode",
     canopyMode: "Canopy",
     wingsuitMode: "Wingsuit",
+    wingsuitPlanningMode: "Wingsuit Planning",
+    manualPatternMode: "Manual Drawer",
+    autoPlannerMode: "Auto Mode",
     canopyAndJumper: "Canopy + Jumper",
     wingsuitSettings: "Wingsuit",
     preset: "Preset",
@@ -249,11 +333,39 @@ const translations = {
     flightSpeedKt: "Horizontal Speed (kt)",
     fallRateFps: "Fall Rate (ft/s)",
     patternSettings: "Pattern Settings",
+    jumpRunSettings: "Jump Run",
     side: "Side",
     left: "Left",
     right: "Right",
     allowBaseDrift: "Allow Base Drift",
     landingHeadingDeg: "Landing Heading (deg)",
+    exitHeight: "Exit Height",
+    deployHeight: "Deploy Height",
+    turn1Height: "Turn 1 Height",
+    turn2Height: "Turn 2 Height",
+    jumpRunStart: "Jump Run Start",
+    jumpRunEnd: "Jump Run End",
+    jumpRunDirection: "Jump Run Direction (deg)",
+    jumpRunHeading: "Jump Run Heading",
+    jumpRunLength: "Jump Run Length",
+    jumpRunSpacing: "Group Spacing",
+    jumpRunSpacingSeconds: "Spacing Time",
+    directionSource: "Direction Source",
+    autoHeadwindDirection: "Auto (Headwind)",
+    manualDirection: "Manual",
+    airportConstraint: "Airport Constraint",
+    noConstraint: "None",
+    reciprocalPairConstraint: "Reciprocal Pair",
+    runwayHeading: "Runway Heading (deg)",
+    advancedAssumptions: "Advanced Jump-Run Assumptions",
+    planeAirspeed: "Plane Airspeed (kt)",
+    groupCount: "Group Count",
+    groupSeparation: "Group Separation",
+    slickDeployHeight: "Slick Deploy Height",
+    slickFallRate: "Slick Fall Rate",
+    slickReturnRadius: "Slick Return Radius",
+    jumpRunHelp:
+      "Jump run is resolved automatically from direction intent, winds aloft, and spacing assumptions. Choose auto to use headwind, or manual to set a compass heading. An optional reciprocal runway pair can constrain the heading. The solver then computes crosswind offsite, group spacing, run length, and the resolved slot string before searching deploy within 2 km of landing, on the upwind half, outside the jump-run corridor, with a first leg no more than 45° from jump-run direction, and an exit that returns to the resolved WS slot.",
     suggestHeadwindFinal: "Suggest Headwind Final",
     landingDirectionSlider: "Landing Direction Slider",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -266,9 +378,25 @@ const translations = {
     speedLabel: (speedUnitLabel: string) => `Speed (${speedUnitLabel})`,
     directionFromDeg: "Direction From (deg)",
     outputs: "Outputs",
+    autoDiagnostics: "Auto Diagnostics",
     wingLoading: "Wing Loading",
     estAirspeed: "Est. Airspeed",
     estFlightSpeed: "Horizontal Speed",
+    preferredDeployBearing: "Preferred Deploy Bearing",
+    selectedDeployBearing: "Selected Deploy Bearing",
+    selectedDeployRadius: "Selected Deploy Radius",
+    exitToJumpRunError: "Exit to WS Slot Error",
+    corridorMargin: "Corridor Margin",
+    deployRadiusMargin: "Deploy Radius Margin",
+    firstLegTrackDelta: "First Leg Track Delta",
+    headingSource: "Heading Source",
+    headingConstraint: "Constraint Applied",
+    headwindComponent: "Headwind Component",
+    crosswindComponent: "Crosswind Component",
+    crosswindOffsite: "Crosswind Offsite",
+    firstSlickReturnMargin: "First Slick Return Margin",
+    lastSlickReturnMargin: "Last Slick Return Margin",
+    feasibleDeployBands: "Feasible Deploy Bearings",
     lastSurfaceWind: (
       speed: string,
       speedUnitLabel: string,
@@ -325,12 +453,15 @@ const translations = {
     statusReady: "就绪。",
     title: "飞行航线模拟器",
     planningNote: "仅用于规划参考，不构成实际运行指导。请始终遵守 DZ 程序、空中交通和教练指示。",
+    displaySection: "显示",
     languageSection: "语言",
     languageEnglish: "English",
     languageChinese: "中文",
     unitsSection: "单位",
     imperial: "英制",
     metric: "公制",
+    yes: "是",
+    no: "否",
     touchdownSpot: "着陆点",
     useBrowserLocation: "使用浏览器定位",
     loadingWind: "正在加载风数据...",
@@ -340,13 +471,18 @@ const translations = {
     searchLocation: "搜索位置",
     lat: "纬度",
     lng: "经度",
+    landingPoint: "着陆点",
     applyTouchdown: "应用着陆点",
+    applyLandingPoint: "应用着陆点",
     spotNamePlaceholder: "点位名称",
     saveSpot: "保存点位",
     selectSavedSpot: "选择已保存点位",
     modeSection: "飞行模式",
     canopyMode: "伞翼",
     wingsuitMode: "翼装",
+    wingsuitPlanningMode: "翼装规划方式",
+    manualPatternMode: "手动画线",
+    autoPlannerMode: "自动规划",
     canopyAndJumper: "伞翼与跳伞员",
     wingsuitSettings: "翼装",
     preset: "预设",
@@ -374,11 +510,38 @@ const translations = {
     flightSpeedKt: "水平速度 (kt)",
     fallRateFps: "下沉率 (ft/s)",
     patternSettings: "航线设置",
+    jumpRunSettings: "航线基准",
     side: "方向",
     left: "左",
     right: "右",
     allowBaseDrift: "允许第二边随风漂移",
     landingHeadingDeg: "着陆航向 (度)",
+    exitHeight: "出舱高度",
+    deployHeight: "开伞高度",
+    turn1Height: "第一转弯高度",
+    turn2Height: "第二转弯高度",
+    jumpRunStart: "航线起点",
+    jumpRunEnd: "航线终点",
+    jumpRunDirection: "航线方向 (度)",
+    jumpRunHeading: "航线方向",
+    jumpRunLength: "航线长度",
+    jumpRunSpacing: "组间距",
+    jumpRunSpacingSeconds: "间隔时间",
+    directionSource: "方向来源",
+    autoHeadwindDirection: "自动（迎风）",
+    manualDirection: "手动",
+    airportConstraint: "机场约束",
+    noConstraint: "无",
+    reciprocalPairConstraint: "往返一对",
+    runwayHeading: "跑道航向 (度)",
+    advancedAssumptions: "高级航线假设",
+    planeAirspeed: "飞机空速 (kt)",
+    groupCount: "编组数量",
+    groupSeparation: "组间距",
+    slickDeployHeight: "普通跳伞员开伞高度",
+    slickFallRate: "普通跳伞员下沉率",
+    slickReturnRadius: "普通跳伞员返场半径",
+    jumpRunHelp: "自动模式会根据方向意图、高空风和编组间距假设自动解析航线。可选择自动迎风方向，也可手动输入罗盘方向；还可以用一对往返跑道方向进行约束。求解器随后会计算侧风偏置、组间距、航线长度，以及精确的翼装出舱位，然后再在着陆点 2 公里范围内、迎风半平面内、跳线禁飞走廊之外搜索开伞点，并要求第一段航迹与跳线方向夹角不超过 45 度。",
     suggestHeadwindFinal: "一键设为迎风着陆航向",
     landingDirectionSlider: "着陆方向滑块",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -391,9 +554,25 @@ const translations = {
     speedLabel: (speedUnitLabel: string) => `速度 (${speedUnitLabel})`,
     directionFromDeg: "来向 (度)",
     outputs: "输出",
+    autoDiagnostics: "自动规划诊断",
     wingLoading: "翼载",
     estAirspeed: "估算空速",
     estFlightSpeed: "水平速度",
+    preferredDeployBearing: "优选开伞方位",
+    selectedDeployBearing: "已选开伞方位",
+    selectedDeployRadius: "已选开伞距离",
+    exitToJumpRunError: "出舱点到翼装出舱位误差",
+    corridorMargin: "禁飞带余量",
+    deployRadiusMargin: "开伞距离余量",
+    firstLegTrackDelta: "第一段航迹偏角",
+    headingSource: "航向来源",
+    headingConstraint: "是否施加约束",
+    headwindComponent: "迎风分量",
+    crosswindComponent: "侧风分量",
+    crosswindOffsite: "侧风偏置",
+    firstSlickReturnMargin: "第一组返场余量",
+    lastSlickReturnMargin: "最后普通组返场余量",
+    feasibleDeployBands: "可行开伞方位数",
     lastSurfaceWind: (
       speed: string,
       speedUnitLabel: string,
@@ -485,6 +664,13 @@ export default function App() {
     setWingsuit,
     setWingsuitWindLayers,
     updateWingsuitWindLayer,
+    wingsuitAutoSettings,
+    setWingsuitPlanningMode,
+    setWingsuitAutoDirectionMode,
+    setWingsuitAutoManualHeading,
+    setWingsuitAutoConstraintMode,
+    setWingsuitAutoConstraintHeading,
+    setWingsuitAutoAssumptions,
     namedSpots,
     saveNamedSpot,
     selectNamedSpot,
@@ -500,6 +686,9 @@ export default function App() {
     wingsuit.presetId === "aura"
       ? wingsuit.presetId
       : "custom";
+  const wingsuitPlanningMode = wingsuitAutoSettings.planningMode;
+  const isWingsuitAuto = mode === "wingsuit" && wingsuitPlanningMode === "auto";
+  const jumpRunSettings = wingsuitAutoSettings;
   const gatesFt = mode === "canopy" ? canopySettings.gatesFt : wingsuitSettings.gatesFt;
   const windLayers = mode === "canopy" ? canopySettings.windLayers : wingsuitSettings.windLayers;
   const wingsuitGlideRatio = useMemo(() => glideRatioForWingsuit(wingsuit), [wingsuit]);
@@ -536,6 +725,19 @@ export default function App() {
     setWingsuit(wingsuitProfileForPreset(presetId));
   }
 
+  function setWingsuitAutoHeight(exitHeightFt: number, deployHeightFt: number): void {
+    const safeDeployFt = Math.max(100, Math.min(exitHeightFt - 100, deployHeightFt));
+    const safeExitFt = Math.max(safeDeployFt + 100, exitHeightFt);
+    const ratios = deriveWingsuitAutoTurnRatios(wingsuitSettings.gatesFt) ?? { turn1: 0.75, turn2: 0.3125 };
+    const spanFt = safeExitFt - safeDeployFt;
+    setWingsuitGates([
+      safeExitFt,
+      safeDeployFt + spanFt * ratios.turn1,
+      safeDeployFt + spanFt * ratios.turn2,
+      safeDeployFt,
+    ]);
+  }
+
   const [touchdownLatInput, setTouchdownLatInput] = useState(touchdown.lat.toFixed(5));
   const [touchdownLngInput, setTouchdownLngInput] = useState(touchdown.lng.toFixed(5));
   const [locationQuery, setLocationQuery] = useState("");
@@ -552,6 +754,11 @@ export default function App() {
     );
   }, [t.statusReady]);
 
+  useEffect(() => {
+    setTouchdownLatInput(touchdown.lat.toFixed(5));
+    setTouchdownLngInput(touchdown.lng.toFixed(5));
+  }, [touchdown.lat, touchdown.lng]);
+
   const patternInput = useMemo(
     () =>
       buildPatternInput({
@@ -567,8 +774,28 @@ export default function App() {
   );
 
   const patternOutput = useMemo(() => computePattern(patternInput), [patternInput]);
+  const autoPatternInput = useMemo(
+    () =>
+      buildWingsuitAutoInput({
+        landingPoint: touchdown,
+        jumpRun: jumpRunSettings,
+        side,
+        wingsuitSettings,
+      }),
+    [touchdown, jumpRunSettings, side, wingsuitSettings],
+  );
+  const autoPatternOutput = useMemo<WingsuitAutoOutput | null>(
+    () => (isWingsuitAuto ? solveWingsuitAuto(autoPatternInput) : null),
+    [isWingsuitAuto, autoPatternInput],
+  );
+  const resolvedJumpRun = autoPatternOutput?.resolvedJumpRun ?? null;
+  const jumpRunHeading = resolvedJumpRun?.headingDeg ?? null;
+  const jumpRunLength = resolvedJumpRun?.lengthFt ?? null;
 
   const safeLandingHeadings = useMemo(() => {
+    if (isWingsuitAuto) {
+      return [];
+    }
     const candidates: number[] = [];
     for (let heading = 0; heading < 360; heading += 5) {
       const result = computePattern({
@@ -586,11 +813,11 @@ export default function App() {
     return candidates
       .sort((a, b) => circularDistanceDeg(a, landingHeadingDeg) - circularDistanceDeg(b, landingHeadingDeg))
       .slice(0, 8);
-  }, [patternInput, landingHeadingDeg]);
+  }, [isWingsuitAuto, patternInput, landingHeadingDeg]);
 
   const windMutation = useMutation({
     mutationFn: async () => {
-      const requestedAltitudes = getRequestedWindAltitudes(mode, gatesFt);
+      const requestedAltitudes = getRequestedWindAltitudes(mode, gatesFt, wingsuitPlanningMode);
       if (mode === "wingsuit") {
         try {
           const profile = await fetchWingsuitWindProfile(touchdown.lat, touchdown.lng, requestedAltitudes);
@@ -761,6 +988,7 @@ export default function App() {
       shearAlpha,
       canopySettings,
       wingsuitSettings,
+      wingsuitAutoSettings,
       namedSpots,
       unitSystem,
       language,
@@ -801,6 +1029,18 @@ export default function App() {
           gatesFt: [number, number, number, number];
           wingsuit: WingsuitProfile;
           windLayers: WindLayer[];
+        };
+        wingsuitAutoSettings: {
+          planningMode: WingsuitPlanningMode;
+          directionMode?: "auto" | "manual";
+          manualHeadingDeg?: number;
+          constraintMode?: "none" | "reciprocal";
+          constraintHeadingDeg?: number;
+          assumptions?: Partial<WingsuitAutoJumpRunAssumptions>;
+          jumpRun?: {
+            start?: { lat: number; lng: number };
+            end?: { lat: number; lng: number };
+          };
         };
         language: Language;
       }>;
@@ -865,6 +1105,43 @@ export default function App() {
           setWingsuitWindLayers(payload.wingsuitSettings.windLayers);
         }
       }
+      if (payload.wingsuitAutoSettings) {
+        if (
+          payload.wingsuitAutoSettings.planningMode === "manual" ||
+          payload.wingsuitAutoSettings.planningMode === "auto"
+        ) {
+          setWingsuitPlanningMode(payload.wingsuitAutoSettings.planningMode);
+        }
+        if (
+          payload.wingsuitAutoSettings.directionMode === "auto" ||
+          payload.wingsuitAutoSettings.directionMode === "manual"
+        ) {
+          setWingsuitAutoDirectionMode(payload.wingsuitAutoSettings.directionMode);
+        } else if (payload.wingsuitAutoSettings.jumpRun?.start && payload.wingsuitAutoSettings.jumpRun?.end) {
+          setWingsuitAutoDirectionMode("manual");
+          setWingsuitAutoManualHeading(
+            headingFromCoordinates(
+              payload.wingsuitAutoSettings.jumpRun.start,
+              payload.wingsuitAutoSettings.jumpRun.end,
+            ),
+          );
+        }
+        if (typeof payload.wingsuitAutoSettings.manualHeadingDeg === "number") {
+          setWingsuitAutoManualHeading(payload.wingsuitAutoSettings.manualHeadingDeg);
+        }
+        if (
+          payload.wingsuitAutoSettings.constraintMode === "none" ||
+          payload.wingsuitAutoSettings.constraintMode === "reciprocal"
+        ) {
+          setWingsuitAutoConstraintMode(payload.wingsuitAutoSettings.constraintMode);
+        }
+        if (typeof payload.wingsuitAutoSettings.constraintHeadingDeg === "number") {
+          setWingsuitAutoConstraintHeading(payload.wingsuitAutoSettings.constraintHeadingDeg);
+        }
+        if (payload.wingsuitAutoSettings.assumptions) {
+          setWingsuitAutoAssumptions(payload.wingsuitAutoSettings.assumptions);
+        }
+      }
       if (payload.mode === "canopy" || payload.mode === "wingsuit") {
         setMode(payload.mode);
       } else {
@@ -897,13 +1174,43 @@ export default function App() {
       : modeledRawAirspeedKt < airspeedMinKt - clampTolerance
         ? t.airspeedRaised(airspeedMinKt)
         : null;
-  const hasCautionWarnings = patternOutput.warnings.length > 0;
-  const outputStatusClass = patternOutput.blocked ? "blocked" : hasCautionWarnings ? "caution" : "ok";
-  const outputStatusText = patternOutput.blocked
+  const activeWarnings = isWingsuitAuto ? autoPatternOutput?.warnings ?? [] : patternOutput.warnings;
+  const activeBlocked = isWingsuitAuto ? autoPatternOutput?.blocked ?? true : patternOutput.blocked;
+  const activeSegments = isWingsuitAuto ? autoPatternOutput?.routeSegments ?? [] : patternOutput.segments;
+  const activeEstSinkFps = isWingsuitAuto ? wingsuit.fallRateFps : patternOutput.metrics.estSinkFps;
+  const activeSpeedKt = isWingsuitAuto ? wingsuit.flightSpeedKt : patternOutput.metrics.estAirspeedKt;
+  const locationSectionTitle = isWingsuitAuto ? t.landingPoint : t.touchdownSpot;
+  const applyLocationLabel = isWingsuitAuto ? t.applyLandingPoint : t.applyTouchdown;
+  const hasCautionWarnings = activeWarnings.length > 0;
+  const outputStatusClass = activeBlocked ? "blocked" : hasCautionWarnings ? "caution" : "ok";
+  const outputStatusText = activeBlocked
     ? t.outputBlocked
     : hasCautionWarnings
       ? t.outputCaution
       : t.outputValid;
+  const autoDiagnostics = autoPatternOutput?.diagnostics;
+
+  function formatOptionalDegrees(value: number | null | undefined): string {
+    return value == null ? "--" : `${value.toFixed(0)}°`;
+  }
+
+  function formatOptionalDistance(valueFt: number | null | undefined): string {
+    return valueFt == null ? "--" : `${toDisplayFeet(unitSystem, valueFt).toFixed(0)} ${altUnitLabel}`;
+  }
+
+  function formatOptionalSpeed(valueKt: number | null | undefined): string {
+    return valueKt == null ? "--" : `${toDisplayKnots(unitSystem, valueKt).toFixed(1)} ${speedUnitLabel}`;
+  }
+
+  function formatHeadingSource(value: WingsuitAutoOutput["diagnostics"]["headingSource"]): string {
+    if (value === "auto-headwind") {
+      return t.autoHeadwindDirection;
+    }
+    if (value === "manual") {
+      return t.manualDirection;
+    }
+    return "--";
+  }
 
   return (
     <div className="app-shell">
@@ -914,68 +1221,122 @@ export default function App() {
 
       <main className="layout">
         <section className="map-column">
-          <MapPanel
-            language={language}
-            touchdown={touchdown}
-            waypoints={patternOutput.waypoints}
-            blocked={patternOutput.blocked}
-            hasWarnings={patternOutput.warnings.length > 0}
-            landingHeadingDeg={landingHeadingDeg}
-            windLayers={windLayers}
-            onTouchdownChange={handleTouchdownChange}
-            onHeadingChange={(headingDeg) => setHeading(headingDeg)}
-          />
+          {isWingsuitAuto ? (
+            <MapPanel
+              key="auto"
+              variant="auto"
+              language={language}
+              landingPoint={touchdown}
+              resolvedJumpRun={resolvedJumpRun}
+              routeWaypoints={autoPatternOutput?.routeWaypoints ?? []}
+              landingNoDeployZonePolygon={autoPatternOutput?.landingNoDeployZonePolygon ?? []}
+              downwindDeployForbiddenZonePolygon={autoPatternOutput?.downwindDeployForbiddenZonePolygon ?? []}
+              forbiddenZonePolygon={autoPatternOutput?.forbiddenZonePolygon ?? []}
+              feasibleDeployRegionPolygon={autoPatternOutput?.feasibleDeployRegionPolygon ?? []}
+              blocked={activeBlocked}
+              hasWarnings={hasCautionWarnings}
+              windLayers={windLayers}
+              onLandingPointChange={handleTouchdownChange}
+            />
+          ) : (
+            <MapPanel
+              key="manual"
+              variant="manual"
+              language={language}
+              touchdown={touchdown}
+              waypoints={patternOutput.waypoints}
+              blocked={patternOutput.blocked}
+              hasWarnings={patternOutput.warnings.length > 0}
+              landingHeadingDeg={landingHeadingDeg}
+              windLayers={windLayers}
+              onTouchdownChange={handleTouchdownChange}
+              onHeadingChange={(headingDeg) => setHeading(headingDeg)}
+            />
+          )}
         </section>
 
         <aside className="sidebar">
           <section>
-            <h2>{t.languageSection}</h2>
-            <div className="row">
-              <label>
-                <input type="radio" checked={language === "en"} onChange={() => setLanguage("en")} />
-                {t.languageEnglish}
-              </label>
-              <label>
-                <input type="radio" checked={language === "zh"} onChange={() => setLanguage("zh")} />
-                {t.languageChinese}
-              </label>
-            </div>
-          </section>
-
-          <section>
-            <h2>{t.unitsSection}</h2>
-            <div className="row">
-              <label>
-                <input
-                  type="radio"
-                  checked={unitSystem === "imperial"}
-                  onChange={() => setUnitSystem("imperial")}
-                />
-                {t.imperial}
-              </label>
-              <label>
-                <input type="radio" checked={unitSystem === "metric"} onChange={() => setUnitSystem("metric")} />
-                {t.metric}
-              </label>
+            <h2>{t.displaySection}</h2>
+            <div className="grid two compact-grid">
+              <div className="control-cell">
+                <p className="control-title">{t.languageSection}</p>
+                <div className="row wrap compact-options">
+                  <label className="option-chip">
+                    <input type="radio" checked={language === "en"} onChange={() => setLanguage("en")} />
+                    {t.languageEnglish}
+                  </label>
+                  <label className="option-chip">
+                    <input type="radio" checked={language === "zh"} onChange={() => setLanguage("zh")} />
+                    {t.languageChinese}
+                  </label>
+                </div>
+              </div>
+              <div className="control-cell">
+                <p className="control-title">{t.unitsSection}</p>
+                <div className="row wrap compact-options">
+                  <label className="option-chip">
+                    <input
+                      type="radio"
+                      checked={unitSystem === "imperial"}
+                      onChange={() => setUnitSystem("imperial")}
+                    />
+                    {t.imperial}
+                  </label>
+                  <label className="option-chip">
+                    <input type="radio" checked={unitSystem === "metric"} onChange={() => setUnitSystem("metric")} />
+                    {t.metric}
+                  </label>
+                </div>
+              </div>
             </div>
           </section>
 
           <section>
             <h2>{t.modeSection}</h2>
-            <div className="row">
-              <label>
-                <input type="radio" checked={mode === "canopy"} onChange={() => setMode("canopy")} />
-                {t.canopyMode}
-              </label>
-              <label>
-                <input type="radio" checked={mode === "wingsuit"} onChange={() => setMode("wingsuit")} />
-                {t.wingsuitMode}
-              </label>
+            <div className="grid compact-grid">
+              <div className="control-cell">
+                <p className="control-title">{t.modeSection}</p>
+                <div className="row wrap compact-options">
+                  <label className="option-chip">
+                    <input type="radio" checked={mode === "canopy"} onChange={() => setMode("canopy")} />
+                    {t.canopyMode}
+                  </label>
+                  <label className="option-chip">
+                    <input type="radio" checked={mode === "wingsuit"} onChange={() => setMode("wingsuit")} />
+                    {t.wingsuitMode}
+                  </label>
+                </div>
+              </div>
+
+              {mode === "wingsuit" ? (
+                <div className="control-cell">
+                  <p className="control-title">{t.wingsuitPlanningMode}</p>
+                  <div className="row wrap compact-options">
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={wingsuitPlanningMode === "manual"}
+                        onChange={() => setWingsuitPlanningMode("manual")}
+                      />
+                      {t.manualPatternMode}
+                    </label>
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={wingsuitPlanningMode === "auto"}
+                        onChange={() => setWingsuitPlanningMode("auto")}
+                      />
+                      {t.autoPlannerMode}
+                    </label>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
 
           <section>
-            <h2>{t.touchdownSpot}</h2>
+            <h2>{locationSectionTitle}</h2>
             <div className="row wrap">
               <button onClick={handleUseGeolocation}>{t.useBrowserLocation}</button>
               <button onClick={() => windMutation.mutate()} disabled={windMutation.isPending}>
@@ -1011,7 +1372,7 @@ export default function App() {
                 <input value={touchdownLngInput} onChange={(event) => setTouchdownLngInput(event.target.value)} />
               </label>
             </div>
-            <button onClick={handleTouchdownInputApply}>{t.applyTouchdown}</button>
+            <button onClick={handleTouchdownInputApply}>{applyLocationLabel}</button>
             <p className="status">{statusMessage}</p>
             <div className="grid two">
               <input
@@ -1137,7 +1498,10 @@ export default function App() {
               <div className="grid two">
                 <label>
                   {t.wingsuitPreset}
-                  <select value={wingsuitPresetId} onChange={(event) => handleWingsuitPresetChange(event.target.value as WingsuitPresetId)}>
+                  <select
+                    value={wingsuitPresetId}
+                    onChange={(event) => handleWingsuitPresetChange(event.target.value as WingsuitPresetId)}
+                  >
                     <option value="swift">{t.wingsuitPresetSwift}</option>
                     <option value="atc">{t.wingsuitPresetAtc}</option>
                     <option value="freak">{t.wingsuitPresetFreak}</option>
@@ -1181,58 +1545,249 @@ export default function App() {
 
           <section>
             <h2>{t.patternSettings}</h2>
-            <div className="row">
-              <label>
-                {t.side}
-                <select value={side} onChange={(event) => setSide(event.target.value as "left" | "right")}>
-                  <option value="left">{t.left}</option>
-                  <option value="right">{t.right}</option>
-                </select>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={baseLegDrift}
-                  onChange={(event) => setBaseLegDrift(event.target.checked)}
-                />
-                {t.allowBaseDrift}
-              </label>
-              <label>
-                {t.landingHeadingDeg}
-                <NumberInput value={landingHeadingDeg} onValueChange={(nextValue) => setHeading(nextValue)} />
-              </label>
-              <button onClick={handleSetSuggestedHeading}>{t.suggestHeadwindFinal}</button>
-            </div>
-            <label>
-              {t.landingDirectionSlider}
-              <input
-                type="range"
-                min={0}
-                max={359}
-                value={landingHeadingDeg}
-                onChange={(event) => setHeading(numberFromInput(event.target.value, landingHeadingDeg))}
-              />
-            </label>
-            <div className="grid two">
-              {gatesFt.map((gate, index) => (
-                <label key={index}>
-                  {t.gateLabel(mode, index, altUnitLabel)}
-                  <NumberInput
-                    value={Math.round(toDisplayFeet(unitSystem, gate))}
-                    onValueChange={(nextValue) => {
-                      const next = [...gatesFt] as [number, number, number, number];
-                      next[index] = fromDisplayFeet(unitSystem, nextValue);
-                      setActiveGates(next);
-                    }}
+            {isWingsuitAuto ? (
+              <>
+                <div className="grid two">
+                  <label>
+                    {t.side}
+                    <select value={side} onChange={(event) => setSide(event.target.value as "left" | "right")}>
+                      <option value="left">{t.left}</option>
+                      <option value="right">{t.right}</option>
+                    </select>
+                  </label>
+                  <label>
+                    {t.shearExponent}
+                    <NumberInput
+                      step="0.01"
+                      value={shearAlpha}
+                      onValueChange={(nextValue) => setShearAlpha(nextValue)}
+                    />
+                  </label>
+                  <label>
+                    {t.exitHeight} ({altUnitLabel})
+                    <NumberInput
+                      value={Math.round(toDisplayFeet(unitSystem, wingsuitSettings.gatesFt[0]))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoHeight(
+                          fromDisplayFeet(unitSystem, nextValue),
+                          wingsuitSettings.gatesFt[3],
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.deployHeight} ({altUnitLabel})
+                    <NumberInput
+                      value={Math.round(toDisplayFeet(unitSystem, wingsuitSettings.gatesFt[3]))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoHeight(
+                          wingsuitSettings.gatesFt[0],
+                          fromDisplayFeet(unitSystem, nextValue),
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="row">
+                  <label>
+                    {t.side}
+                    <select value={side} onChange={(event) => setSide(event.target.value as "left" | "right")}>
+                      <option value="left">{t.left}</option>
+                      <option value="right">{t.right}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={baseLegDrift}
+                      onChange={(event) => setBaseLegDrift(event.target.checked)}
+                    />
+                    {t.allowBaseDrift}
+                  </label>
+                  <label>
+                    {t.landingHeadingDeg}
+                    <NumberInput value={landingHeadingDeg} onValueChange={(nextValue) => setHeading(nextValue)} />
+                  </label>
+                  <button onClick={handleSetSuggestedHeading}>{t.suggestHeadwindFinal}</button>
+                </div>
+                <label>
+                  {t.landingDirectionSlider}
+                  <input
+                    type="range"
+                    min={0}
+                    max={359}
+                    value={landingHeadingDeg}
+                    onChange={(event) => setHeading(numberFromInput(event.target.value, landingHeadingDeg))}
                   />
                 </label>
-              ))}
-              <label>
-                {t.shearExponent}
-                <NumberInput step="0.01" value={shearAlpha} onValueChange={(nextValue) => setShearAlpha(nextValue)} />
-              </label>
-            </div>
+                <div className="grid two">
+                  {gatesFt.map((gate, index) => (
+                    <label key={index}>
+                      {t.gateLabel(mode, index, altUnitLabel)}
+                      <NumberInput
+                        value={Math.round(toDisplayFeet(unitSystem, gate))}
+                        onValueChange={(nextValue) => {
+                          const next = [...gatesFt] as [number, number, number, number];
+                          next[index] = fromDisplayFeet(unitSystem, nextValue);
+                          setActiveGates(next);
+                        }}
+                      />
+                    </label>
+                  ))}
+                  <label>
+                    {t.shearExponent}
+                    <NumberInput
+                      step="0.01"
+                      value={shearAlpha}
+                      onValueChange={(nextValue) => setShearAlpha(nextValue)}
+                    />
+                  </label>
+                </div>
+              </>
+            )}
           </section>
+
+          {isWingsuitAuto ? (
+            <section>
+              <h2>{t.jumpRunSettings}</h2>
+              <p className="status">
+                {t.jumpRunHeading}: {jumpRunHeading == null ? "--" : `${jumpRunHeading.toFixed(0)}°`} ·{" "}
+                {t.jumpRunLength}:{" "}
+                {jumpRunLength == null ? "--" : `${toDisplayFeet(unitSystem, jumpRunLength).toFixed(0)} ${altUnitLabel}`}
+                {resolvedJumpRun
+                  ? ` · ${t.jumpRunSpacing}: ${toDisplayFeet(unitSystem, resolvedJumpRun.groupSpacingFt).toFixed(0)} ${altUnitLabel} · ${t.jumpRunSpacingSeconds}: ${resolvedJumpRun.groupSpacingSec.toFixed(1)} s`
+                  : ""}
+              </p>
+              <p className="status">{t.jumpRunHelp}</p>
+              <div className="grid two compact-grid">
+                <div className="control-cell">
+                  <p className="control-title">{t.directionSource}</p>
+                  <div className="row wrap compact-options">
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={jumpRunSettings.directionMode === "auto"}
+                        onChange={() => setWingsuitAutoDirectionMode("auto")}
+                      />
+                      {t.autoHeadwindDirection}
+                    </label>
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={jumpRunSettings.directionMode === "manual"}
+                        onChange={() => setWingsuitAutoDirectionMode("manual")}
+                      />
+                      {t.manualDirection}
+                    </label>
+                  </div>
+                </div>
+                <div className="control-cell">
+                  <p className="control-title">{t.airportConstraint}</p>
+                  <div className="row wrap compact-options">
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={jumpRunSettings.constraintMode === "none"}
+                        onChange={() => setWingsuitAutoConstraintMode("none")}
+                      />
+                      {t.noConstraint}
+                    </label>
+                    <label className="option-chip">
+                      <input
+                        type="radio"
+                        checked={jumpRunSettings.constraintMode === "reciprocal"}
+                        onChange={() => setWingsuitAutoConstraintMode("reciprocal")}
+                      />
+                      {t.reciprocalPairConstraint}
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="grid two">
+                {jumpRunSettings.directionMode === "manual" ? (
+                  <label>
+                    {t.jumpRunDirection}
+                    <NumberInput
+                      step="1"
+                      value={Number(jumpRunSettings.manualHeadingDeg.toFixed(0))}
+                      onValueChange={(nextValue) => setWingsuitAutoManualHeading(nextValue)}
+                    />
+                  </label>
+                ) : null}
+                {jumpRunSettings.constraintMode === "reciprocal" ? (
+                  <label>
+                    {t.runwayHeading}
+                    <NumberInput
+                      step="1"
+                      value={Number(jumpRunSettings.constraintHeadingDeg.toFixed(0))}
+                      onValueChange={(nextValue) => setWingsuitAutoConstraintHeading(nextValue)}
+                    />
+                  </label>
+                ) : null}
+              </div>
+              <details>
+                <summary>{t.advancedAssumptions}</summary>
+                <label>
+                  {t.planeAirspeed} ({speedUnitLabel})
+                  <NumberInput
+                    step="0.5"
+                    value={Number(toDisplayKnots(unitSystem, jumpRunSettings.assumptions.planeAirspeedKt).toFixed(1))}
+                    onValueChange={(nextValue) =>
+                      setWingsuitAutoAssumptions({ planeAirspeedKt: fromDisplayKnots(unitSystem, nextValue) })
+                    }
+                  />
+                </label>
+                <div className="grid two">
+                  <label>
+                    {t.groupCount}
+                    <NumberInput
+                      step="1"
+                      value={jumpRunSettings.assumptions.groupCount}
+                      onValueChange={(nextValue) => setWingsuitAutoAssumptions({ groupCount: Math.round(nextValue) })}
+                    />
+                  </label>
+                  <label>
+                    {t.groupSeparation} ({altUnitLabel})
+                    <NumberInput
+                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.groupSeparationFt))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoAssumptions({ groupSeparationFt: fromDisplayFeet(unitSystem, nextValue) })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.slickDeployHeight} ({altUnitLabel})
+                    <NumberInput
+                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickDeployHeightFt))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoAssumptions({ slickDeployHeightFt: fromDisplayFeet(unitSystem, nextValue) })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.slickReturnRadius} ({altUnitLabel})
+                    <NumberInput
+                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickReturnRadiusFt))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoAssumptions({ slickReturnRadiusFt: fromDisplayFeet(unitSystem, nextValue) })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.slickFallRate}
+                    <NumberInput
+                      step="1"
+                      value={Number(jumpRunSettings.assumptions.slickFallRateFps.toFixed(0))}
+                      onValueChange={(nextValue) => setWingsuitAutoAssumptions({ slickFallRateFps: nextValue })}
+                    />
+                  </label>
+                </div>
+              </details>
+            </section>
+          ) : null}
 
           <section>
             <h2>{t.windLayers}</h2>
@@ -1280,7 +1835,7 @@ export default function App() {
             ) : null}
             <p>
               {mode === "canopy" ? t.estAirspeed : t.estFlightSpeed}:{" "}
-              {toDisplayKnots(unitSystem, patternOutput.metrics.estAirspeedKt).toFixed(1)} {speedUnitLabel}
+              {toDisplayKnots(unitSystem, activeSpeedKt).toFixed(1)} {speedUnitLabel}
             </p>
             {lastSurfaceWind ? (
               <p>
@@ -1303,16 +1858,78 @@ export default function App() {
             ) : (
               <p>{t.wingsuitModel(wingsuit.name)}</p>
             )}
-            <p>{t.estSink(patternOutput.metrics.estSinkFps.toFixed(2))}</p>
+            <p>{t.estSink(activeEstSinkFps.toFixed(2))}</p>
             <p className={outputStatusClass}>{outputStatusText}</p>
-            {patternOutput.warnings.length > 0 ? (
+            {isWingsuitAuto ? (
+              <>
+                <h3>{t.autoDiagnostics}</h3>
+                <div className="metrics-grid">
+                  <p className="metric-card">
+                    {t.headingSource}: {formatHeadingSource(autoDiagnostics?.headingSource ?? null)}
+                  </p>
+                  <p className="metric-card">
+                    {t.headingConstraint}: {autoDiagnostics == null ? "--" : autoDiagnostics.constrainedHeadingApplied ? t.yes : t.no}
+                  </p>
+                  <p className="metric-card">
+                    {t.headwindComponent}: {formatOptionalSpeed(autoDiagnostics?.headwindComponentKt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.crosswindComponent}: {formatOptionalSpeed(autoDiagnostics?.crosswindComponentKt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.crosswindOffsite}: {formatOptionalDistance(autoDiagnostics?.crosswindOffsetFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.firstSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.firstSlickReturnMarginFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.lastSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.lastSlickReturnMarginFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.preferredDeployBearing}: {formatOptionalDegrees(autoDiagnostics?.preferredDeployBearingDeg)}
+                  </p>
+                  <p className="metric-card">
+                    {t.selectedDeployBearing}: {formatOptionalDegrees(autoDiagnostics?.selectedDeployBearingDeg)}
+                  </p>
+                  <p className="metric-card">
+                    {t.selectedDeployRadius}: {formatOptionalDistance(autoDiagnostics?.selectedDeployRadiusFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.exitToJumpRunError}: {formatOptionalDistance(autoDiagnostics?.exitToJumpRunErrorFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.corridorMargin}: {formatOptionalDistance(autoDiagnostics?.corridorMarginFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.deployRadiusMargin}: {formatOptionalDistance(autoDiagnostics?.deployRadiusMarginFt)}
+                  </p>
+                  <p className="metric-card">
+                    {t.firstLegTrackDelta}: {formatOptionalDegrees(autoDiagnostics?.firstLegTrackDeltaDeg)}
+                  </p>
+                  <p className="metric-card">
+                    {t.turn1Height}: {formatOptionalDistance(autoDiagnostics?.turnHeightsFt?.[0])}
+                  </p>
+                  <p className="metric-card">
+                    {t.turn2Height}: {formatOptionalDistance(autoDiagnostics?.turnHeightsFt?.[1])}
+                  </p>
+                  <p className="metric-card">
+                    {t.feasibleDeployBands}: {autoPatternOutput?.deployBandsByBearing.length ?? 0}
+                  </p>
+                  <p className="metric-card">
+                    {t.jumpRunHeading}: {jumpRunHeading == null ? "--" : `${jumpRunHeading.toFixed(0)}°`}
+                  </p>
+                </div>
+              </>
+            ) : null}
+            {autoDiagnostics?.failureReason ? <p className="blocked">{autoDiagnostics.failureReason}</p> : null}
+            {activeWarnings.length > 0 ? (
               <ul>
-                {patternOutput.warnings.map((warning) => (
+                {activeWarnings.map((warning) => (
                   <li key={warning}>{warning}</li>
                 ))}
               </ul>
             ) : null}
-            {patternOutput.segments.length > 0 ? (
+            {activeSegments.length > 0 ? (
               <table>
                 <thead>
                   <tr>
@@ -1326,7 +1943,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {patternOutput.segments.map((segment) => (
+                  {activeSegments.map((segment) => (
                     <tr key={segment.name}>
                       <td>{formatSegmentName(language, segment.name)}</td>
                       <td>{segment.headingDeg.toFixed(0)}</td>
@@ -1340,7 +1957,7 @@ export default function App() {
                 </tbody>
               </table>
             ) : null}
-            {safeLandingHeadings.length > 0 ? (
+            {!isWingsuitAuto && safeLandingHeadings.length > 0 ? (
               <div>
                 <p>{t.saferHeadings}</p>
                 <div className="row wrap">
@@ -1351,9 +1968,9 @@ export default function App() {
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : !isWingsuitAuto ? (
               <p>{t.noForwardHeading}</p>
-            )}
+            ) : null}
           </section>
 
           <section>

@@ -13,15 +13,20 @@ struct ContentView: View {
     private var t: AppStrings { store.language.strings }
 
     var body: some View {
+        let manualOutput = store.patternOutput
+        let autoOutput = store.isWingsuitAutoMode ? store.wingsuitAutoOutput : nil
+        let blocked = autoOutput?.blocked ?? manualOutput.blocked
+        let warnings = autoOutput?.warnings ?? manualOutput.warnings
+
         GeometryReader { geometry in
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 0) {
-                    mapPanel
+                    mapPanel(manualOutput: manualOutput, autoOutput: autoOutput, blocked: blocked, hasWarnings: !warnings.isEmpty)
                         .frame(height: geometry.size.height * 0.52)
                         .clipped()
                     Divider()
                     ScrollView {
-                        controls
+                        controls(manualOutput: manualOutput, autoOutput: autoOutput)
                             .padding(16)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -62,18 +67,27 @@ struct ContentView: View {
         }
     }
 
-    private var mapPanel: some View {
-        let output = store.patternOutput
+    private func mapPanel(
+        manualOutput: PatternOutput,
+        autoOutput: WingsuitAutoOutput?,
+        blocked: Bool,
+        hasWarnings: Bool
+    ) -> some View {
         let basemapStyle: LandingBasemapStyle = store.mapStackChoice == .mapKit ? .appleDefault : .tokenlessSatellite
         return ZStack(alignment: .topLeading) {
             Group {
                 switch store.mapStackChoice {
                 case .mapKit:
                     MapKitLandingMapView(
+                        isWingsuitAutoMode: store.isWingsuitAutoMode,
                         touchdown: store.touchdown,
-                        waypoints: output.waypoints,
-                        blocked: output.blocked,
-                        hasWarnings: !output.warnings.isEmpty,
+                        waypoints: manualOutput.waypoints,
+                        autoOutput: autoOutput,
+                        landingPoint: store.wingsuitAutoLandingPoint,
+                        jumpRunStart: store.wingsuitAutoJumpRunStart,
+                        jumpRunEnd: store.wingsuitAutoJumpRunEnd,
+                        blocked: blocked,
+                        hasWarnings: hasWarnings,
                         landingHeadingDeg: store.landingHeadingDeg,
                         basemapStyle: basemapStyle,
                         windLayers: store.activeWindLayers,
@@ -82,14 +96,28 @@ struct ContentView: View {
                         },
                         onHeadingChange: { coordinate in
                             store.setHeadingFromHandle(coordinate)
+                        },
+                        onLandingPointChange: { coordinate in
+                            store.setLandingPoint(coordinate)
+                        },
+                        onJumpRunStartChange: { coordinate in
+                            store.setJumpRunStart(coordinate)
+                        },
+                        onJumpRunEndChange: { coordinate in
+                            store.setJumpRunEnd(coordinate)
                         }
                     )
                 case .mapbox:
                     MapboxLandingMapView(
+                        isWingsuitAutoMode: store.isWingsuitAutoMode,
                         touchdown: store.touchdown,
-                        waypoints: output.waypoints,
-                        blocked: output.blocked,
-                        hasWarnings: !output.warnings.isEmpty,
+                        waypoints: manualOutput.waypoints,
+                        autoOutput: autoOutput,
+                        landingPoint: store.wingsuitAutoLandingPoint,
+                        jumpRunStart: store.wingsuitAutoJumpRunStart,
+                        jumpRunEnd: store.wingsuitAutoJumpRunEnd,
+                        blocked: blocked,
+                        hasWarnings: hasWarnings,
                         landingHeadingDeg: store.landingHeadingDeg,
                         basemapStyle: basemapStyle,
                         windLayers: store.activeWindLayers,
@@ -98,21 +126,29 @@ struct ContentView: View {
                         },
                         onHeadingChange: { coordinate in
                             store.setHeadingFromHandle(coordinate)
+                        },
+                        onLandingPointChange: { coordinate in
+                            store.setLandingPoint(coordinate)
+                        },
+                        onJumpRunStartChange: { coordinate in
+                            store.setJumpRunStart(coordinate)
+                        },
+                        onJumpRunEndChange: { coordinate in
+                            store.setJumpRunEnd(coordinate)
                         }
                     )
                 }
             }
 
-            statusBadge
+            statusBadge(blocked: blocked, hasWarnings: hasWarnings)
                 .padding(12)
         }
     }
 
-    private var statusBadge: some View {
-        let output = store.patternOutput
-        let caution = !output.blocked && !output.warnings.isEmpty
-        let text = output.blocked ? t.statusBlocked : caution ? t.statusCaution : t.statusValid
-        let color = output.blocked ? Color.red.opacity(0.8) : caution ? Color.orange.opacity(0.85) : Color.green.opacity(0.8)
+    private func statusBadge(blocked: Bool, hasWarnings: Bool) -> some View {
+        let caution = !blocked && hasWarnings
+        let text = blocked ? t.statusBlocked : caution ? t.statusCaution : t.statusValid
+        let color = blocked ? Color.red.opacity(0.8) : caution ? Color.orange.opacity(0.85) : Color.green.opacity(0.8)
         return Text(text)
             .font(.caption.weight(.semibold))
             .foregroundColor(.white)
@@ -122,7 +158,7 @@ struct ContentView: View {
             .clipShape(Capsule())
     }
 
-    private var controls: some View {
+    private func controls(manualOutput: PatternOutput, autoOutput: WingsuitAutoOutput?) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(t.title)
                 .font(.title3.weight(.bold))
@@ -132,12 +168,12 @@ struct ContentView: View {
             locationSection
             patternSection
             if store.mode == .canopy {
-                canopySection
+                canopySection(manualOutput: manualOutput)
             } else {
                 wingsuitSection
             }
             windSection
-            outputSection
+            outputSection(manualOutput: manualOutput, autoOutput: autoOutput)
             ioSection
             mapStackSection
         }
@@ -202,47 +238,82 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button(t.headwindFinalButton) {
-                    store.suggestHeadwindFinal()
+                if !store.isWingsuitAutoMode {
+                    Button(t.headwindFinalButton) {
+                        store.suggestHeadwindFinal()
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
-            Text("\(t.touchdownLabel): \(formatCoordinate(store.touchdown))")
+            if store.isWingsuitAutoMode {
+                Group {
+                    Text("\(t.landingPointLabel): \(formatCoordinate(store.wingsuitAutoLandingPoint))")
+                    Text("\(t.jumpRunStartLabel): \(formatCoordinate(store.wingsuitAutoJumpRunStart))")
+                    Text("\(t.jumpRunEndLabel): \(formatCoordinate(store.wingsuitAutoJumpRunEnd))")
+                    Text(t.autoModeMapHint)
+                }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            } else {
+                Text("\(t.touchdownLabel): \(formatCoordinate(store.touchdown))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var patternSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.patternSection)
-            HStack(spacing: 12) {
+            if store.isWingsuitAutoMode {
                 Picker(t.sideLabel, selection: $store.side) {
                     Text(t.sideLeft).tag(PatternSide.left)
                     Text(t.sideRight).tag(PatternSide.right)
                 }
                 .pickerStyle(.segmented)
 
-                Toggle(t.driftBaseToggle, isOn: $store.baseLegDrift)
-                    .toggleStyle(.switch)
-            }
+                HStack(spacing: 10) {
+                    NumericInput(title: t.autoExitHeightLabel, value: $store.wingsuitAutoExitHeightFt, precision: 0)
+                    NumericInput(title: t.autoDeployHeightLabel, value: $store.wingsuitAutoDeployHeightFt, precision: 0)
+                }
+                HStack(spacing: 12) {
+                    Button(t.reverseJumpRunButton) {
+                        store.reverseJumpRun()
+                    }
+                    .buttonStyle(.bordered)
+                    Text(t.autoModeMapHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Picker(t.sideLabel, selection: $store.side) {
+                        Text(t.sideLeft).tag(PatternSide.left)
+                        Text(t.sideRight).tag(PatternSide.right)
+                    }
+                    .pickerStyle(.segmented)
 
-            NumericInput(title: t.landingHeadingLabel, value: $store.landingHeadingDeg, precision: 1)
+                    Toggle(t.driftBaseToggle, isOn: $store.baseLegDrift)
+                        .toggleStyle(.switch)
+                }
 
-            HStack(spacing: 10) {
-                NumericInput(title: gateLabel(for: 0), value: gateBinding(0), precision: 0)
-                NumericInput(title: gateLabel(for: 1), value: gateBinding(1), precision: 0)
-            }
-            HStack(spacing: 10) {
-                NumericInput(title: gateLabel(for: 2), value: gateBinding(2), precision: 0)
-                NumericInput(title: gateLabel(for: 3), value: gateBinding(3), precision: 0)
+                NumericInput(title: t.landingHeadingLabel, value: $store.landingHeadingDeg, precision: 1)
+
+                HStack(spacing: 10) {
+                    NumericInput(title: gateLabel(for: 0), value: gateBinding(0), precision: 0)
+                    NumericInput(title: gateLabel(for: 1), value: gateBinding(1), precision: 0)
+                }
+                HStack(spacing: 10) {
+                    NumericInput(title: gateLabel(for: 2), value: gateBinding(2), precision: 0)
+                    NumericInput(title: gateLabel(for: 3), value: gateBinding(3), precision: 0)
+                }
             }
             NumericInput(title: t.shearExponentLabel, value: $store.shearAlpha, precision: 2)
         }
     }
 
-    private var canopySection: some View {
+    private func canopySection(manualOutput: PatternOutput) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.canopySection)
 
@@ -273,8 +344,8 @@ struct ContentView: View {
                 NumericInput(title: t.airspeedMaxLabel, value: canopyBindingOptional(\.airspeedMaxKt, defaultValue: 35), precision: 1)
             }
 
-            let wl = store.patternOutput.metrics.wingLoading
-            let speed = store.patternOutput.metrics.estAirspeedKt
+            let wl = manualOutput.metrics.wingLoading
+            let speed = manualOutput.metrics.estAirspeedKt
             Text(t.currentWlSummary(wl ?? 0, speed))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -284,6 +355,12 @@ struct ContentView: View {
     private var wingsuitSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.wingsuitSection)
+
+            Picker(t.wingsuitPlanningModeLabel, selection: $store.wingsuitPlanningMode) {
+                Text(t.wingsuitPlanningManual).tag(WingsuitPlanningMode.manual)
+                Text(t.wingsuitPlanningAuto).tag(WingsuitPlanningMode.auto)
+            }
+            .pickerStyle(.segmented)
 
             Picker(
                 t.wingsuitPresetLabel,
@@ -298,6 +375,7 @@ struct ContentView: View {
                 Text(t.wingsuitPresetAura).tag(WingsuitPresetId.aura)
                 Text(t.wingsuitPresetCustom).tag(WingsuitPresetId.custom)
             }
+            .pickerStyle(.menu)
 
             HStack(spacing: 10) {
                 TextField(t.wingsuitNameLabel, text: Binding(
@@ -327,6 +405,11 @@ struct ContentView: View {
     private var windSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.windLayersSection)
+            if store.isWingsuitAutoMode {
+                Text(t.autoWindLayersHint(store.activeWindLayers.count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             ForEach(Array(store.activeWindLayers.enumerated()), id: \.offset) { index, _ in
                 HStack(spacing: 8) {
                     NumericInput(
@@ -371,38 +454,68 @@ struct ContentView: View {
         }
     }
 
-    private var outputSection: some View {
-        let output = store.patternOutput
+    private func outputSection(manualOutput: PatternOutput, autoOutput: WingsuitAutoOutput?) -> some View {
         return VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: t.outputsSection)
-            if store.mode == .canopy {
-                Text(String(format: "\(t.wingLoadingLabel): %.2f", output.metrics.wingLoading ?? 0))
-            }
-            Text(
-                String(
-                    format: "\(store.mode == .canopy ? t.estAirspeedLabel : t.estFlightSpeedLabel): %.1f kt",
-                    output.metrics.estAirspeedKt
-                )
-            )
-            Text(String(format: "\(t.estSinkLabel): %.2f ft/s", output.metrics.estSinkFps))
-            if store.mode == .wingsuit {
+            if let autoOutput {
+                Text(String(format: "\(t.estFlightSpeedLabel): %.1f kt", store.wingsuit.flightSpeedKt))
+                Text(String(format: "\(t.estSinkLabel): %.2f ft/s", store.wingsuit.fallRateFps))
                 Text(t.wingsuitModelSummary(store.wingsuit.name))
                     .foregroundStyle(.secondary)
+
+                if let failureReason = autoOutput.diagnostics.failureReason {
+                    Label("\(t.autoFailureReasonLabel): \(failureReason)", systemImage: "xmark.octagon.fill")
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
+                if let preferred = autoOutput.diagnostics.preferredDeployBearingDeg {
+                    Text(String(format: "\(t.autoPreferredBearingLabel): %.0f deg", preferred))
+                }
+                if let selectedBearing = autoOutput.diagnostics.selectedDeployBearingDeg,
+                   let selectedRadius = autoOutput.diagnostics.selectedDeployRadiusFt {
+                    Text(String(format: "\(t.autoSelectedDeployLabel): %.0f deg / %.0f ft", selectedBearing, selectedRadius))
+                }
+                if let exitError = autoOutput.diagnostics.exitToJumpRunErrorFt {
+                    Text(String(format: "\(t.autoExitErrorLabel): %.0f ft", exitError))
+                }
+                if let corridorMargin = autoOutput.diagnostics.corridorMarginFt {
+                    Text(String(format: "\(t.autoCorridorMarginLabel): %.0f ft", corridorMargin))
+                }
+                if let envelopeMargin = autoOutput.diagnostics.deployEnvelopeMarginFt {
+                    Text(String(format: "\(t.autoEnvelopeMarginLabel): %.0f ft", envelopeMargin))
+                }
+            } else {
+                if store.mode == .canopy {
+                    Text(String(format: "\(t.wingLoadingLabel): %.2f", manualOutput.metrics.wingLoading ?? 0))
+                }
+                Text(
+                    String(
+                        format: "\(store.mode == .canopy ? t.estAirspeedLabel : t.estFlightSpeedLabel): %.1f kt",
+                        manualOutput.metrics.estAirspeedKt
+                    )
+                )
+                Text(String(format: "\(t.estSinkLabel): %.2f ft/s", manualOutput.metrics.estSinkFps))
+                if store.mode == .wingsuit {
+                    Text(t.wingsuitModelSummary(store.wingsuit.name))
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            if output.warnings.isEmpty {
+            let warnings = autoOutput?.warnings ?? manualOutput.warnings
+            if warnings.isEmpty {
                 Text(t.noWarnings)
                     .foregroundStyle(.green)
             } else {
-                ForEach(output.warnings, id: \.self) { warning in
+                ForEach(warnings, id: \.self) { warning in
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                         .font(.footnote)
                 }
             }
 
-            if !output.segments.isEmpty {
-                ForEach(output.segments, id: \.name) { segment in
+            let segments = autoOutput?.routeSegments ?? manualOutput.segments
+            if !segments.isEmpty {
+                ForEach(segments, id: \.name) { segment in
                     HStack {
                         Text(localizedSegmentName(segment.name))
                             .fontWeight(.semibold)
@@ -552,6 +665,12 @@ private struct WindLegendView: View {
     let title: String
     let windLayers: [WindLayer]
 
+    private var displayedLayers: [WindLayer] {
+        let sorted = windLayers.sorted(by: { $0.altitudeFt > $1.altitudeFt })
+        guard sorted.count > 8 else { return sorted }
+        return Array(sorted.prefix(4)) + Array(sorted.suffix(4))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -560,7 +679,7 @@ private struct WindLegendView: View {
                 Text(title)
                     .font(.caption.weight(.semibold))
             }
-            ForEach(Array(windLayers.sorted(by: { $0.altitudeFt > $1.altitudeFt }).enumerated()), id: \.offset) { _, layer in
+            ForEach(Array(displayedLayers.enumerated()), id: \.offset) { _, layer in
                 HStack(spacing: 8) {
                     Text(String(format: "%.0fft", layer.altitudeFt))
                         .font(.caption2.monospacedDigit().weight(.semibold))
@@ -571,6 +690,11 @@ private struct WindLegendView: View {
                     Text(String(format: "%.1fkt from %.0fdeg", layer.speedKt, layer.dirFromDeg))
                         .font(.caption2.monospacedDigit())
                 }
+            }
+            if windLayers.count > displayedLayers.count {
+                Text("+\(windLayers.count - displayedLayers.count) more")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(11)

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { PatternInput } from "@landing/ui-types";
-import { computePattern, normalizeHeading, validatePatternInput, windFromToGroundVector } from "../src";
-import { getWindForAltitude } from "../src/math";
+import type { PatternInput, WingsuitAutoInput } from "@landing/ui-types";
+import {
+  computePattern,
+  normalizeHeading,
+  solveWingsuitAuto,
+  validatePatternInput,
+  validateWingsuitAutoInput,
+  windFromToGroundVector,
+} from "../src";
+import { getWindForAltitude, knotsToFeetPerSecond } from "../src/math";
 
 const baseInput: PatternInput = {
   mode: "canopy",
@@ -48,6 +55,45 @@ const wingsuitInput: PatternInput = {
     { altitudeFt: 2000, speedKt: 18, dirFromDeg: 230, source: "auto" },
     { altitudeFt: 1000, speedKt: 14, dirFromDeg: 220, source: "auto" },
   ],
+};
+
+const autoLanding = { lat: 37.0, lng: -122.0 };
+
+const autoInput: WingsuitAutoInput = {
+  landingPoint: autoLanding,
+  jumpRun: {
+    directionMode: "manual",
+    manualHeadingDeg: 0,
+    constraintMode: "none",
+    constraintHeadingDeg: 0,
+    assumptions: {
+      planeAirspeedKt: 85,
+      groupCount: 4,
+      groupSeparationFt: 1500,
+      slickDeployHeightFt: 3000,
+      slickFallRateFps: 176,
+      slickReturnRadiusFt: 5000,
+    },
+  },
+  side: "left",
+  exitHeightFt: 10000,
+  deployHeightFt: 4500,
+  wingsuit: {
+    name: "Squirrel FREAK",
+    flightSpeedKt: 84,
+    fallRateFps: 68,
+  },
+  winds: [
+    { altitudeFt: 12000, speedKt: 20, dirFromDeg: 270, source: "manual" },
+    { altitudeFt: 8000, speedKt: 16, dirFromDeg: 270, source: "manual" },
+    { altitudeFt: 4000, speedKt: 12, dirFromDeg: 270, source: "manual" },
+  ],
+  tuning: {
+    corridorHalfWidthFt: 250,
+    deployBearingWindowHalfDeg: 70,
+    deployRadiusStepFt: 250,
+    minDeployRadiusFt: 1000,
+  },
 };
 
 describe("math helpers", () => {
@@ -246,5 +292,182 @@ describe("computePattern", () => {
 
     expect(output.blocked).toBe(true);
     expect(output.warnings.some((warning) => warning.includes("requires at least two active legs"))).toBe(true);
+  });
+});
+
+describe("wingsuit auto mode", () => {
+  it("requires a finite manual jump-run heading", () => {
+    const validation = validateWingsuitAutoInput({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "manual",
+        manualHeadingDeg: Number.NaN,
+      },
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toContain("Manual jump-run direction requires a finite heading.");
+  });
+
+  it("solves a nominal auto pattern and derives default turn heights", () => {
+    const output = solveWingsuitAuto(autoInput);
+
+    expect(output.blocked).toBe(false);
+    expect(output.resolvedJumpRun).not.toBeNull();
+    expect(output.routeWaypoints.map((waypoint) => waypoint.name)).toEqual(["exit", "turn1", "turn2", "deploy"]);
+    expect(output.turnPoints.map((waypoint) => waypoint.name)).toEqual(["turn1", "turn2"]);
+    expect(output.routeSegments.length).toBeGreaterThanOrEqual(2);
+    expect(output.routeSegments.length).toBeLessThanOrEqual(3);
+    expect(output.deployBandsByBearing.length).toBeGreaterThan(0);
+    expect(output.feasibleDeployRegionPolygon.length).toBeGreaterThan(0);
+    expect(output.landingNoDeployZonePolygon.length).toBeGreaterThan(0);
+    expect(output.downwindDeployForbiddenZonePolygon.length).toBeGreaterThan(0);
+    expect(output.forbiddenZonePolygon).toHaveLength(4);
+    expect(output.diagnostics.preferredDeployBearingDeg).toBe(270);
+    expect(output.deployPoint).not.toBeNull();
+    expect(output.exitPoint).not.toBeNull();
+    expect(output.diagnostics.selectedDeployRadiusFt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(6562);
+    expect(output.diagnostics.exitToJumpRunErrorFt ?? Number.POSITIVE_INFINITY).toBeLessThan(300);
+    expect(output.diagnostics.deployRadiusMarginFt ?? -1).toBeGreaterThanOrEqual(0);
+    expect(output.diagnostics.firstLegTrackDeltaDeg ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(45);
+    expect(output.diagnostics.turnHeightsFt?.[0] ?? 0).toBeGreaterThanOrEqual(output.diagnostics.turnHeightsFt?.[1] ?? 0);
+    expect(output.diagnostics.turnHeightsFt?.[1] ?? 0).toBeGreaterThan(autoInput.deployHeightFt);
+    expect(output.warnings.some((warning) => warning.includes("Exit remains"))).toBe(false);
+    expect(output.resolvedJumpRun?.slots).toHaveLength(4);
+  });
+
+  it("uses the low-wind headwind when jump-run direction is automatic", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "auto",
+      },
+    });
+
+    expect(output.resolvedJumpRun?.headingDeg).toBe(270);
+    expect(output.diagnostics.headingSource).toBe("auto-headwind");
+  });
+
+  it("snaps automatic direction to the closer reciprocal runway heading", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "auto",
+        constraintMode: "reciprocal",
+        constraintHeadingDeg: 180,
+      },
+    });
+
+    expect(output.resolvedJumpRun?.headingDeg).toBe(180);
+    expect(output.diagnostics.constrainedHeadingApplied).toBe(true);
+  });
+
+  it("honors manual direction when unconstrained", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "manual",
+        manualHeadingDeg: 33,
+      },
+    });
+
+    expect(output.resolvedJumpRun?.headingDeg).toBe(33);
+    expect(output.diagnostics.headingSource).toBe("manual");
+  });
+
+  it("computes crosswind offsite and jump-run spacing from assumptions", () => {
+    const output = solveWingsuitAuto(autoInput);
+    expect(Math.abs(output.resolvedJumpRun?.crosswindOffsetFt ?? 0)).toBeGreaterThan(0);
+    expect(output.resolvedJumpRun?.lengthFt).toBe(6000);
+    expect(output.resolvedJumpRun?.groupSpacingFt).toBe(1500);
+    expect(output.resolvedJumpRun?.groupSpacingSec ?? 0).toBeCloseTo(
+      1500 / knotsToFeetPerSecond(output.resolvedJumpRun?.planeGroundSpeedKt ?? 45),
+      6,
+    );
+  });
+
+  it("blocks when slick groups cannot fit inside the return radius", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        assumptions: {
+          ...autoInput.jumpRun.assumptions,
+          slickReturnRadiusFt: 1000,
+        },
+      },
+    });
+
+    expect(output.blocked).toBe(true);
+    expect(output.resolvedJumpRun).not.toBeNull();
+    expect(output.diagnostics.failureReason).toContain("slick groups");
+    expect(output.diagnostics.firstSlickReturnMarginFt ?? 0).toBeLessThan(0);
+  });
+
+  it("uses custom turn ratios", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      turnRatios: {
+        turn1: 0.6,
+        turn2: 0.25,
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.diagnostics.turnHeightsFt?.[0] ?? 0).toBeGreaterThanOrEqual(output.diagnostics.turnHeightsFt?.[1] ?? 0);
+    expect(output.diagnostics.turnHeightsFt?.[1] ?? 0).toBeGreaterThan(4000);
+  });
+
+  it("blocks when the jump-run corridor removes every deploy candidate", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      tuning: {
+        ...autoInput.tuning,
+        corridorHalfWidthFt: 30000,
+        maxDeployRadiusFt: 1000,
+      },
+    });
+
+    expect(output.blocked).toBe(true);
+    expect(output.diagnostics.failureReason).toBe("No deploy point survives jump-run corridor exclusion.");
+    expect(output.deployBandsByBearing).toHaveLength(0);
+  });
+
+  it("caps deploy solutions to the fixed maximum radius", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      tuning: {
+        ...autoInput.tuning,
+        maxDeployRadiusFt: 6400,
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.diagnostics.selectedDeployRadiusFt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(6400);
+    expect(
+      output.deployBandsByBearing.every((band) => band.maxRadiusFt <= 6400 + 1e-6),
+    ).toBe(true);
+  });
+
+  it("reports the first-leg track rule when that is the limiting factor", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "manual",
+        manualHeadingDeg: 5,
+      },
+      tuning: {
+        ...autoInput.tuning,
+        maxFirstLegTrackDeltaDeg: 1,
+      },
+    });
+
+    expect(output.blocked).toBe(true);
+    expect(output.diagnostics.failureReason).toContain("first leg within 1°");
   });
 });

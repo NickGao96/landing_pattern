@@ -29,6 +29,10 @@ struct AppStrings {
     let fetchWingsuitWindButton: String
     let headwindFinalButton: String
     let touchdownLabel: String
+    let landingPointLabel: String
+    let jumpRunStartLabel: String
+    let jumpRunEndLabel: String
+    let autoModeMapHint: String
     let selectedResult: String
     let modeSection: String
     let modeCanopy: String
@@ -47,9 +51,15 @@ struct AppStrings {
     let turnOneGateLabel: String
     let turnTwoGateLabel: String
     let deployGateLabel: String
+    let autoExitHeightLabel: String
+    let autoDeployHeightLabel: String
+    let reverseJumpRunButton: String
     let shearExponentLabel: String
     let canopySection: String
     let wingsuitSection: String
+    let wingsuitPlanningModeLabel: String
+    let wingsuitPlanningManual: String
+    let wingsuitPlanningAuto: String
     let presetLabel: String
     let canopySizeLabel: String
     let exitWeightLabel: String
@@ -71,6 +81,7 @@ struct AppStrings {
     let fallRateLabel: String
     let currentWingsuitSummary: (Double, Double, Double) -> String
     let windLayersSection: String
+    let autoWindLayersHint: (Int) -> String
     let windAltLabel: String
     let windSpeedLabel: String
     let windFromLabel: String
@@ -80,6 +91,12 @@ struct AppStrings {
     let estFlightSpeedLabel: String
     let estSinkLabel: String
     let wingsuitModelSummary: (String) -> String
+    let autoFailureReasonLabel: String
+    let autoPreferredBearingLabel: String
+    let autoSelectedDeployLabel: String
+    let autoExitErrorLabel: String
+    let autoCorridorMarginLabel: String
+    let autoEnvelopeMarginLabel: String
     let noWarnings: String
     let importExportSection: String
     let exportSnapshotButton: String
@@ -119,6 +136,10 @@ struct AppStrings {
         fetchWingsuitWindButton: "Fetch Upper Winds",
         headwindFinalButton: "Headwind Final",
         touchdownLabel: "Touchdown",
+        landingPointLabel: "Landing Point",
+        jumpRunStartLabel: "Jump Run Start",
+        jumpRunEndLabel: "Jump Run End",
+        autoModeMapHint: "Drag the landing pin and jump-run handles on the map to edit auto mode.",
         selectedResult: "selected result",
         modeSection: "Flight Mode",
         modeCanopy: "Canopy",
@@ -137,9 +158,15 @@ struct AppStrings {
         turnOneGateLabel: "Turn 1 Gate (ft)",
         turnTwoGateLabel: "Turn 2 Gate (ft)",
         deployGateLabel: "Deploy Gate (ft)",
+        autoExitHeightLabel: "Exit Height (ft)",
+        autoDeployHeightLabel: "Deploy Height (ft)",
+        reverseJumpRunButton: "Reverse Jump Run",
         shearExponentLabel: "Shear Exponent",
         canopySection: "Canopy + Jumper",
         wingsuitSection: "Wingsuit",
+        wingsuitPlanningModeLabel: "Planning Mode",
+        wingsuitPlanningManual: "Manual",
+        wingsuitPlanningAuto: "Auto",
         presetLabel: "Preset",
         canopySizeLabel: "Canopy Size (sqft)",
         exitWeightLabel: "Exit Weight (lb)",
@@ -165,6 +192,7 @@ struct AppStrings {
             String(format: "Horizontal %.1f kt, Vertical %.1f ft/s, Approx GR %.2f", speed, fallRate, glideRatio)
         },
         windLayersSection: "Wind Layers",
+        autoWindLayersHint: { count in "Auto mode is using \(count) wind layers from ground to exit. You can edit any layer below." },
         windAltLabel: "Alt (ft)",
         windSpeedLabel: "Speed (kt)",
         windFromLabel: "From (deg)",
@@ -174,6 +202,12 @@ struct AppStrings {
         estFlightSpeedLabel: "Horizontal Speed",
         estSinkLabel: "Est. Sink",
         wingsuitModelSummary: { name in "Wingsuit profile: \(name)" },
+        autoFailureReasonLabel: "Failure",
+        autoPreferredBearingLabel: "Preferred Deploy Bearing",
+        autoSelectedDeployLabel: "Selected Deploy",
+        autoExitErrorLabel: "Exit to Jump Run Error",
+        autoCorridorMarginLabel: "Corridor Margin",
+        autoEnvelopeMarginLabel: "Envelope Margin",
         noWarnings: "No active warnings.",
         importExportSection: "Import / Export",
         exportSnapshotButton: "Export Snapshot JSON",
@@ -218,6 +252,10 @@ struct AppStrings {
         fetchWingsuitWindButton: "获取高空风",
         headwindFinalButton: "迎风第三边",
         touchdownLabel: "着陆点",
+        landingPointLabel: "落地点",
+        jumpRunStartLabel: "航线起点",
+        jumpRunEndLabel: "航线终点",
+        autoModeMapHint: "可在地图上拖动落地点和航线手柄来编辑自动模式。",
         selectedResult: "已选结果",
         modeSection: "飞行模式",
         modeCanopy: "伞翼",
@@ -236,9 +274,15 @@ struct AppStrings {
         turnOneGateLabel: "第一转弯高度 (ft)",
         turnTwoGateLabel: "第二转弯高度 (ft)",
         deployGateLabel: "开伞高度 (ft)",
+        autoExitHeightLabel: "出舱高度 (ft)",
+        autoDeployHeightLabel: "开伞高度 (ft)",
+        reverseJumpRunButton: "反转航线",
         shearExponentLabel: "风切变指数",
         canopySection: "伞翼与跳伞员",
         wingsuitSection: "翼装",
+        wingsuitPlanningModeLabel: "规划模式",
+        wingsuitPlanningManual: "手动",
+        wingsuitPlanningAuto: "自动",
         presetLabel: "预设",
         canopySizeLabel: "伞翼面积 (sqft)",
         exitWeightLabel: "出舱重量 (lb)",
@@ -264,6 +308,7 @@ struct AppStrings {
             String(format: "水平速度 %.1f kt，垂直速度 %.1f ft/s，约滑翔比 %.2f", speed, fallRate, glideRatio)
         },
         windLayersSection: "分层风",
+        autoWindLayersHint: { count in "自动模式当前使用从地面到出舱的 \(count) 个风层，可在下方逐层修改。" },
         windAltLabel: "高度 (ft)",
         windSpeedLabel: "速度 (kt)",
         windFromLabel: "来向 (度)",
@@ -273,6 +318,12 @@ struct AppStrings {
         estFlightSpeedLabel: "水平速度",
         estSinkLabel: "估算下沉",
         wingsuitModelSummary: { name in "翼装配置：\(name)" },
+        autoFailureReasonLabel: "失败原因",
+        autoPreferredBearingLabel: "偏好开伞方位",
+        autoSelectedDeployLabel: "已选开伞点",
+        autoExitErrorLabel: "出舱到航线误差",
+        autoCorridorMarginLabel: "禁区余量",
+        autoEnvelopeMarginLabel: "包线余量",
         noWarnings: "当前无警告。",
         importExportSection: "导入 / 导出",
         exportSnapshotButton: "导出快照 JSON",

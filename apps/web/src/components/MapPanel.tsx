@@ -1,11 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import type { PatternWaypoint, WindLayer } from "@landing/ui-types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { GeoPoint, PatternWaypoint, ResolvedJumpRun, WindLayer, WingsuitAutoWaypoint } from "@landing/ui-types";
 import { resolveMapFallbackStyle, resolveMapStyle } from "../lib/mapStyle";
 import type { Language } from "../store";
 
-interface MapPanelProps {
+type MapLibreMap = import("maplibre-gl").Map;
+type MapLibreMarker = import("maplibre-gl").Marker;
+type MapLibreLayer = Parameters<MapLibreMap["addLayer"]>[0];
+
+interface ManualMapPanelProps {
+  variant: "manual";
   language: Language;
-  touchdown: { lat: number; lng: number };
+  touchdown: GeoPoint;
   waypoints: PatternWaypoint[];
   blocked: boolean;
   hasWarnings: boolean;
@@ -15,17 +20,37 @@ interface MapPanelProps {
   onHeadingChange: (headingDeg: number) => void;
 }
 
+interface AutoMapPanelProps {
+  variant: "auto";
+  language: Language;
+  landingPoint: GeoPoint;
+  resolvedJumpRun: ResolvedJumpRun | null;
+  routeWaypoints: WingsuitAutoWaypoint[];
+  landingNoDeployZonePolygon: GeoPoint[];
+  downwindDeployForbiddenZonePolygon: GeoPoint[];
+  forbiddenZonePolygon: GeoPoint[];
+  feasibleDeployRegionPolygon: GeoPoint[];
+  blocked: boolean;
+  hasWarnings: boolean;
+  windLayers: WindLayer[];
+  onLandingPointChange: (lat: number, lng: number) => void;
+}
+
+type MapPanelProps = ManualMapPanelProps | AutoMapPanelProps;
+
 const overlaySourceId = "overlay-source";
 const headingHandleDistanceMeters = 180;
 const headingHandleDistancePixels = 56;
-const patternFitPaddingPixels = 48;
-const patternMinViewportFraction = 0.2;
+const fitPaddingPixels = 48;
+const minViewportFraction = 0.2;
 const earthRadiusMeters = 6_371_000;
+
 const mapTexts: Record<
   Language,
   {
     mapDisabledHeadless: string;
     touchdown: string;
+    landingPoint: string;
     mapFallbackActive: string;
     windLayers: string;
     from: string;
@@ -34,6 +59,7 @@ const mapTexts: Record<
   en: {
     mapDisabledHeadless: "Map disabled in test/headless mode.",
     touchdown: "Touchdown",
+    landingPoint: "Landing Point",
     mapFallbackActive: "Map fallback active",
     windLayers: "Wind Layers",
     from: "from",
@@ -41,6 +67,7 @@ const mapTexts: Record<
   zh: {
     mapDisabledHeadless: "测试/无头模式下地图已禁用。",
     touchdown: "着陆点",
+    landingPoint: "着陆点",
     mapFallbackActive: "地图回退样式已启用",
     windLayers: "分层风",
     from: "来自",
@@ -71,7 +98,7 @@ function destinationPoint(
   lngDeg: number,
   bearingDeg: number,
   distanceMeters: number,
-): { lat: number; lng: number } {
+): GeoPoint {
   const bearing = toRadians(normalizeHeading(bearingDeg));
   const lat1 = toRadians(latDeg);
   const lng1 = toRadians(lngDeg);
@@ -96,10 +123,7 @@ function destinationPoint(
   };
 }
 
-function headingFromPoints(
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-): number {
+function headingFromPoints(from: GeoPoint, to: GeoPoint): number {
   const lat1 = toRadians(from.lat);
   const lat2 = toRadians(to.lat);
   const deltaLng = toRadians(to.lng - from.lng);
@@ -112,11 +136,7 @@ function headingFromPoints(
   return normalizeHeading(toDegrees(Math.atan2(y, x)));
 }
 
-function interpolatePoint(
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-  t: number,
-): { lat: number; lng: number } {
+function interpolatePoint(from: GeoPoint, to: GeoPoint, t: number): GeoPoint {
   const clamped = Math.max(0, Math.min(1, t));
   return {
     lat: from.lat + (to.lat - from.lat) * clamped,
@@ -124,11 +144,42 @@ function interpolatePoint(
   };
 }
 
-function buildOverlayFeatures(
-  touchdown: { lat: number; lng: number },
+function closePolygon(points: GeoPoint[]): Array<[number, number]> {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const closed = points.map((point) => [point.lng, point.lat] as [number, number]);
+  const first = closed[0];
+  if (!first) {
+    return closed;
+  }
+  closed.push(first);
+  return closed;
+}
+
+function labelForAutoWaypoint(name: WingsuitAutoWaypoint["name"]): string {
+  switch (name) {
+    case "landing":
+      return "LND";
+    case "deploy":
+      return "DEP";
+    case "turn2":
+      return "T2";
+    case "turn1":
+      return "T1";
+    case "exit":
+      return "EXIT";
+    default:
+      return String(name).toUpperCase();
+  }
+}
+
+function buildManualOverlayFeatures(
+  touchdown: GeoPoint,
   waypoints: PatternWaypoint[],
   landingHeadingDeg: number,
-  headingHandle?: { lat: number; lng: number },
+  headingHandle?: GeoPoint,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
 
@@ -186,7 +237,7 @@ function buildOverlayFeatures(
     const label = isTouchdown ? "TD" : `${Math.round(waypoint.altFt)} ft`;
     features.push({
       type: "Feature",
-      properties: { kind: "turn-point", label },
+      properties: { kind: "manual-waypoint", label },
       geometry: {
         type: "Point",
         coordinates: [waypoint.lng, waypoint.lat],
@@ -236,11 +287,173 @@ function buildOverlayFeatures(
   };
 }
 
+function buildAutoOverlayFeatures(props: AutoMapPanelProps): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+
+  if (props.forbiddenZonePolygon.length >= 3) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "forbidden-zone" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [closePolygon(props.forbiddenZonePolygon)],
+      },
+    });
+  }
+
+  if (props.landingNoDeployZonePolygon.length >= 3) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "landing-no-deploy-zone" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [closePolygon(props.landingNoDeployZonePolygon)],
+      },
+    });
+  }
+
+  if (props.downwindDeployForbiddenZonePolygon.length >= 3) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "downwind-deploy-forbidden-zone" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [closePolygon(props.downwindDeployForbiddenZonePolygon)],
+      },
+    });
+  }
+
+  if (props.feasibleDeployRegionPolygon.length >= 3) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "deploy-region" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [closePolygon(props.feasibleDeployRegionPolygon)],
+      },
+    });
+  }
+
+  if (props.resolvedJumpRun) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "jump-run" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [props.resolvedJumpRun.line.start.lng, props.resolvedJumpRun.line.start.lat],
+          [props.resolvedJumpRun.line.end.lng, props.resolvedJumpRun.line.end.lat],
+        ],
+      },
+    });
+
+    const jumpRunHeadingDeg = headingFromPoints(props.resolvedJumpRun.line.start, props.resolvedJumpRun.line.end);
+    const jumpRunArrowTip = interpolatePoint(props.resolvedJumpRun.line.start, props.resolvedJumpRun.line.end, 0.6);
+    const jumpRunArrowTail = destinationPoint(
+      jumpRunArrowTip.lat,
+      jumpRunArrowTip.lng,
+      jumpRunHeadingDeg + 180,
+      60,
+    );
+    const jumpRunArrowLeft = destinationPoint(jumpRunArrowTip.lat, jumpRunArrowTip.lng, jumpRunHeadingDeg + 155, 32);
+    const jumpRunArrowRight = destinationPoint(jumpRunArrowTip.lat, jumpRunArrowTip.lng, jumpRunHeadingDeg - 155, 32);
+    features.push({
+      type: "Feature",
+      properties: { kind: "jump-run-arrow-shaft" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [jumpRunArrowTail.lng, jumpRunArrowTail.lat],
+          [jumpRunArrowTip.lng, jumpRunArrowTip.lat],
+        ],
+      },
+    });
+    features.push({
+      type: "Feature",
+      properties: { kind: "jump-run-arrow-head" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [jumpRunArrowLeft.lng, jumpRunArrowLeft.lat],
+          [jumpRunArrowTip.lng, jumpRunArrowTip.lat],
+          [jumpRunArrowRight.lng, jumpRunArrowRight.lat],
+        ],
+      },
+    });
+
+    for (const slot of props.resolvedJumpRun.slots) {
+      features.push({
+        type: "Feature",
+        properties: { kind: "jump-run-slot", label: slot.label },
+        geometry: {
+          type: "Point",
+          coordinates: [slot.lng, slot.lat],
+        },
+      });
+    }
+  }
+
+  if (props.routeWaypoints.length >= 2) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "route-line" },
+      geometry: {
+        type: "LineString",
+        coordinates: props.routeWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat]),
+      },
+    });
+  }
+
+  const deployPoint = props.routeWaypoints[props.routeWaypoints.length - 1];
+  if (deployPoint) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "landing-link" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [deployPoint.lng, deployPoint.lat],
+          [props.landingPoint.lng, props.landingPoint.lat],
+        ],
+      },
+    });
+  }
+
+  const labeledPoints: WingsuitAutoWaypoint[] = [
+    {
+      name: "landing",
+      lat: props.landingPoint.lat,
+      lng: props.landingPoint.lng,
+      altFt: 0,
+    },
+    ...props.routeWaypoints,
+  ];
+
+  for (const waypoint of labeledPoints) {
+    features.push({
+      type: "Feature",
+      properties: {
+        kind: "auto-waypoint",
+        label: labelForAutoWaypoint(waypoint.name),
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [waypoint.lng, waypoint.lat],
+      },
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
+}
+
 function headingHandlePointForView(
-  map: import("maplibre-gl").Map,
-  touchdown: { lat: number; lng: number },
+  map: MapLibreMap,
+  touchdown: GeoPoint,
   landingHeadingDeg: number,
-): { lat: number; lng: number } {
+): GeoPoint {
   const touchdownPoint = map.project([touchdown.lng, touchdown.lat]);
   const bearingRad = toRadians(normalizeHeading(landingHeadingDeg));
   const handlePoint = {
@@ -251,35 +464,40 @@ function headingHandlePointForView(
   return { lat: lngLat.lat, lng: lngLat.lng };
 }
 
-function buildOverlayForCurrentView(
-  map: import("maplibre-gl").Map,
-  touchdown: { lat: number; lng: number },
+function buildManualOverlayForCurrentView(
+  map: MapLibreMap,
+  touchdown: GeoPoint,
   waypoints: PatternWaypoint[],
   landingHeadingDeg: number,
 ): {
-  headingPoint: { lat: number; lng: number };
+  headingPoint: GeoPoint;
   data: GeoJSON.FeatureCollection;
 } {
   const headingPoint = headingHandlePointForView(map, touchdown, landingHeadingDeg);
   return {
     headingPoint,
-    data: buildOverlayFeatures(touchdown, waypoints, landingHeadingDeg, headingPoint),
+    data: buildManualOverlayFeatures(touchdown, waypoints, landingHeadingDeg, headingPoint),
   };
 }
 
-function getPatternPoints(
-  touchdown: { lat: number; lng: number },
-  waypoints: PatternWaypoint[],
-): Array<{ lat: number; lng: number }> {
+function getManualFitPoints(touchdown: GeoPoint, waypoints: PatternWaypoint[]): GeoPoint[] {
   return [touchdown, ...waypoints.map((waypoint) => ({ lat: waypoint.lat, lng: waypoint.lng }))];
 }
 
-function shouldFitPatternInView(
-  map: import("maplibre-gl").Map,
-  touchdown: { lat: number; lng: number },
-  waypoints: PatternWaypoint[],
-): boolean {
-  const points = getPatternPoints(touchdown, waypoints);
+function getAutoFitPoints(props: AutoMapPanelProps): GeoPoint[] {
+  return [
+    props.landingPoint,
+    ...(props.resolvedJumpRun ? [props.resolvedJumpRun.line.start, props.resolvedJumpRun.line.end] : []),
+    ...(props.resolvedJumpRun?.slots.map((slot) => ({ lat: slot.lat, lng: slot.lng })) ?? []),
+    ...props.routeWaypoints.map((waypoint) => ({ lat: waypoint.lat, lng: waypoint.lng })),
+    ...props.landingNoDeployZonePolygon,
+    ...props.downwindDeployForbiddenZonePolygon,
+    ...props.forbiddenZonePolygon,
+    ...props.feasibleDeployRegionPolygon,
+  ];
+}
+
+function shouldFitPointsInView(map: MapLibreMap, points: GeoPoint[]): boolean {
   if (points.length <= 1) {
     return false;
   }
@@ -301,26 +519,21 @@ function shouldFitPatternInView(
   }
 
   const offscreen =
-    minX < patternFitPaddingPixels ||
-    maxX > viewWidth - patternFitPaddingPixels ||
-    minY < patternFitPaddingPixels ||
-    maxY > viewHeight - patternFitPaddingPixels;
+    minX < fitPaddingPixels ||
+    maxX > viewWidth - fitPaddingPixels ||
+    minY < fitPaddingPixels ||
+    maxY > viewHeight - fitPaddingPixels;
 
   const underfilled =
-    maxX - minX < viewWidth * patternMinViewportFraction &&
-    maxY - minY < viewHeight * patternMinViewportFraction;
+    maxX - minX < viewWidth * minViewportFraction &&
+    maxY - minY < viewHeight * minViewportFraction;
 
   return offscreen || underfilled;
 }
 
-function fitPatternInView(
-  map: import("maplibre-gl").Map,
-  touchdown: { lat: number; lng: number },
-  waypoints: PatternWaypoint[],
-): void {
-  const points = getPatternPoints(touchdown, waypoints);
+function fitPointsInView(map: MapLibreMap, points: GeoPoint[], center: GeoPoint): void {
   if (points.length <= 1) {
-    map.easeTo({ center: [touchdown.lng, touchdown.lat], zoom: 16, duration: 350 });
+    map.easeTo({ center: [center.lng, center.lat], zoom: 16, duration: 350 });
     return;
   }
 
@@ -342,14 +555,20 @@ function fitPatternInView(
       [maxLng, maxLat],
     ],
     {
-      padding: patternFitPaddingPixels,
+      padding: fitPaddingPixels,
       duration: 350,
       maxZoom: 16,
     },
   );
 }
 
-function ensureOverlayLayers(map: import("maplibre-gl").Map, overlayData: GeoJSON.FeatureCollection): void {
+function addLayerIfMissing(map: MapLibreMap, layer: MapLibreLayer): void {
+  if (!map.getLayer(layer.id)) {
+    map.addLayer(layer);
+  }
+}
+
+function ensureOverlayLayers(map: MapLibreMap, overlayData: GeoJSON.FeatureCollection): void {
   if (!map.getSource(overlaySourceId)) {
     map.addSource(overlaySourceId, {
       type: "geojson",
@@ -357,156 +576,360 @@ function ensureOverlayLayers(map: import("maplibre-gl").Map, overlayData: GeoJSO
     });
   }
 
-  if (!map.getLayer("pattern-line")) {
-    map.addLayer({
-      id: "pattern-line",
-      type: "line",
-      source: overlaySourceId,
-      filter: ["==", "kind", "pattern-line"],
-      paint: {
-        "line-color": "#16a34a",
-        "line-width": 4,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "landing-no-deploy-zone",
+    type: "fill",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "landing-no-deploy-zone"],
+    paint: {
+      "fill-color": "#f59e0b",
+      "fill-opacity": 0.08,
+    },
+  });
 
-  if (!map.getLayer("heading-guide")) {
-    map.addLayer({
-      id: "heading-guide",
-      type: "line",
-      source: overlaySourceId,
-      filter: ["==", "kind", "heading-guide"],
-      paint: {
-        "line-color": "#f59e0b",
-        "line-width": 4,
-        "line-dasharray": [2, 2],
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "downwind-deploy-forbidden-zone",
+    type: "fill",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "downwind-deploy-forbidden-zone"],
+    paint: {
+      "fill-color": "#f59e0b",
+      "fill-opacity": 0.05,
+    },
+  });
 
-  if (!map.getLayer("heading-guide-arrow")) {
-    map.addLayer({
-      id: "heading-guide-arrow",
-      type: "line",
-      source: overlaySourceId,
-      filter: ["==", "kind", "heading-guide-arrow"],
-      paint: {
-        "line-color": "#f59e0b",
-        "line-width": 3,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "deploy-region",
+    type: "fill",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "deploy-region"],
+    paint: {
+      "fill-color": "#16a34a",
+      "fill-opacity": 0.14,
+    },
+  });
 
-  if (!map.getLayer("pattern-direction-shaft")) {
-    map.addLayer({
-      id: "pattern-direction-shaft",
-      type: "line",
-      source: overlaySourceId,
-      filter: ["==", "kind", "pattern-direction-shaft"],
-      paint: {
-        "line-color": "#ffffff",
-        "line-width": 2.5,
-        "line-opacity": 0.9,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "forbidden-zone",
+    type: "fill",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "forbidden-zone"],
+    paint: {
+      "fill-color": "#dc2626",
+      "fill-opacity": 0.16,
+    },
+  });
 
-  if (!map.getLayer("pattern-direction-head")) {
-    map.addLayer({
-      id: "pattern-direction-head",
-      type: "line",
-      source: overlaySourceId,
-      filter: ["==", "kind", "pattern-direction-head"],
-      paint: {
-        "line-color": "#ffffff",
-        "line-width": 2.5,
-        "line-opacity": 0.9,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "forbidden-zone-outline",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "forbidden-zone"],
+    paint: {
+      "line-color": "#ef4444",
+      "line-width": 2,
+      "line-dasharray": [2, 2],
+    },
+  });
 
-  if (!map.getLayer("turn-point-circle")) {
-    map.addLayer({
-      id: "turn-point-circle",
-      type: "circle",
-      source: overlaySourceId,
-      filter: ["==", "kind", "turn-point"],
-      paint: {
-        "circle-radius": 5,
-        "circle-color": "#ffffff",
-        "circle-stroke-color": "#111827",
-        "circle-stroke-width": 2,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "jump-run",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "jump-run"],
+    paint: {
+      "line-color": "#38bdf8",
+      "line-width": 3,
+      "line-dasharray": [2, 1],
+    },
+  });
 
-  if (!map.getLayer("turn-point-label")) {
-    map.addLayer({
-      id: "turn-point-label",
-      type: "symbol",
-      source: overlaySourceId,
-      filter: ["==", "kind", "turn-point"],
-      layout: {
-        "text-field": ["get", "label"],
-        "text-font": ["Noto Sans Regular"],
-        "text-size": 12,
-        "text-offset": [0, -1.2],
-        "text-anchor": "top",
-      },
-      paint: {
-        "text-color": "#111827",
-        "text-halo-color": "#ffffff",
-        "text-halo-width": 1,
-      },
-    });
-  }
+  addLayerIfMissing(map, {
+    id: "jump-run-arrow-shaft",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "jump-run-arrow-shaft"],
+    paint: {
+      "line-color": "#e0f2fe",
+      "line-width": 2.5,
+      "line-opacity": 0.95,
+    },
+  });
 
+  addLayerIfMissing(map, {
+    id: "jump-run-arrow-head",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "jump-run-arrow-head"],
+    paint: {
+      "line-color": "#e0f2fe",
+      "line-width": 2.5,
+      "line-opacity": 0.95,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "jump-run-slot-circle",
+    type: "circle",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "jump-run-slot"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#38bdf8",
+      "circle-stroke-color": "#e0f2fe",
+      "circle-stroke-width": 2,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "jump-run-slot-label",
+    type: "symbol",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "jump-run-slot"],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 12,
+      "text-offset": [0, -1.2],
+      "text-anchor": "top",
+    },
+    paint: {
+      "text-color": "#e0f2fe",
+      "text-halo-color": "#0f172a",
+      "text-halo-width": 1,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "landing-link",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "landing-link"],
+    paint: {
+      "line-color": "#f59e0b",
+      "line-width": 2,
+      "line-dasharray": [1, 2],
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "route-line",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "route-line"],
+    paint: {
+      "line-color": "#16a34a",
+      "line-width": 4,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "pattern-line",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "pattern-line"],
+    paint: {
+      "line-color": "#16a34a",
+      "line-width": 4,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "heading-guide",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "heading-guide"],
+    paint: {
+      "line-color": "#f59e0b",
+      "line-width": 4,
+      "line-dasharray": [2, 2],
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "heading-guide-arrow",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "heading-guide-arrow"],
+    paint: {
+      "line-color": "#f59e0b",
+      "line-width": 3,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "pattern-direction-shaft",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "pattern-direction-shaft"],
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": 2.5,
+      "line-opacity": 0.9,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "pattern-direction-head",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "pattern-direction-head"],
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": 2.5,
+      "line-opacity": 0.9,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "manual-waypoint-circle",
+    type: "circle",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "manual-waypoint"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#ffffff",
+      "circle-stroke-color": "#111827",
+      "circle-stroke-width": 2,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "manual-waypoint-label",
+    type: "symbol",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "manual-waypoint"],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 12,
+      "text-offset": [0, -1.2],
+      "text-anchor": "top",
+    },
+    paint: {
+      "text-color": "#111827",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "auto-waypoint-circle",
+    type: "circle",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "auto-waypoint"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#f8fafc",
+      "circle-stroke-color": "#0f172a",
+      "circle-stroke-width": 2,
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "auto-waypoint-label",
+    type: "symbol",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "auto-waypoint"],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 12,
+      "text-offset": [0, -1.2],
+      "text-anchor": "top",
+    },
+    paint: {
+      "text-color": "#111827",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1,
+    },
+  });
 }
 
-export function MapPanel({
-  language,
-  touchdown,
-  waypoints,
-  blocked,
-  hasWarnings,
-  landingHeadingDeg,
-  windLayers,
-  onTouchdownChange,
-  onHeadingChange,
-}: MapPanelProps) {
-  const t = mapTexts[language];
+function activeRouteColor(blocked: boolean, hasWarnings: boolean): string {
+  if (blocked) {
+    return "#b91c1c";
+  }
+  if (hasWarnings) {
+    return "#d97706";
+  }
+  return "#16a34a";
+}
+
+export function MapPanel(props: MapPanelProps) {
+  const t = mapTexts[props.language];
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<import("maplibre-gl").Map | null>(null);
-  const markerRef = useRef<import("maplibre-gl").Marker | null>(null);
-  const headingMarkerRef = useRef<import("maplibre-gl").Marker | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const mainMarkerRef = useRef<MapLibreMarker | null>(null);
+  const headingMarkerRef = useRef<MapLibreMarker | null>(null);
   const fallbackStyleAppliedRef = useRef(false);
-  const touchdownRef = useRef(touchdown);
-  const waypointsRef = useRef(waypoints);
-  const landingHeadingDegRef = useRef(landingHeadingDeg);
   const ignoreClickUntilMsRef = useRef(0);
+  const propsRef = useRef<MapPanelProps>(props);
   const [mapError, setMapError] = useState<string | null>(null);
-  touchdownRef.current = touchdown;
-  waypointsRef.current = waypoints;
-  landingHeadingDegRef.current = landingHeadingDeg;
+  propsRef.current = props;
 
-  function syncOverlay(map: import("maplibre-gl").Map): void {
-    const overlay = buildOverlayForCurrentView(
-      map,
-      touchdownRef.current,
-      waypointsRef.current,
-      landingHeadingDegRef.current,
-    );
+  function getCurrentManualProps(): ManualMapPanelProps | null {
+    const current = propsRef.current;
+    return current.variant === "manual" ? current : null;
+  }
 
+  function getCurrentAutoProps(): AutoMapPanelProps | null {
+    const current = propsRef.current;
+    return current.variant === "auto" ? current : null;
+  }
+
+  const syncSignature = useMemo(
+    () =>
+      props.variant === "manual"
+        ? JSON.stringify({
+            touchdown: props.touchdown,
+            waypoints: props.waypoints,
+            landingHeadingDeg: props.landingHeadingDeg,
+            blocked: props.blocked,
+            hasWarnings: props.hasWarnings,
+          })
+        : JSON.stringify({
+            landingPoint: props.landingPoint,
+            resolvedJumpRun: props.resolvedJumpRun,
+            routeWaypoints: props.routeWaypoints,
+            landingNoDeployZonePolygon: props.landingNoDeployZonePolygon,
+            downwindDeployForbiddenZonePolygon: props.downwindDeployForbiddenZonePolygon,
+            forbiddenZonePolygon: props.forbiddenZonePolygon,
+            feasibleDeployRegionPolygon: props.feasibleDeployRegionPolygon,
+            blocked: props.blocked,
+            hasWarnings: props.hasWarnings,
+          }),
+    [props],
+  );
+
+  function syncOverlay(map: MapLibreMap): void {
+    if (propsRef.current.variant === "manual") {
+      const overlay = buildManualOverlayForCurrentView(
+        map,
+        propsRef.current.touchdown,
+        propsRef.current.waypoints,
+        propsRef.current.landingHeadingDeg,
+      );
+
+      if (!map.getSource(overlaySourceId)) {
+        ensureOverlayLayers(map, overlay.data);
+      }
+
+      const source = map.getSource(overlaySourceId) as import("maplibre-gl").GeoJSONSource | undefined;
+      source?.setData(overlay.data);
+      mainMarkerRef.current?.setLngLat([propsRef.current.touchdown.lng, propsRef.current.touchdown.lat]);
+      headingMarkerRef.current?.setLngLat([overlay.headingPoint.lng, overlay.headingPoint.lat]);
+      return;
+    }
+
+    const overlay = buildAutoOverlayFeatures(propsRef.current);
     if (!map.getSource(overlaySourceId)) {
-      ensureOverlayLayers(map, overlay.data);
+      ensureOverlayLayers(map, overlay);
     }
 
     const source = map.getSource(overlaySourceId) as import("maplibre-gl").GeoJSONSource | undefined;
-    if (source) {
-      source.setData(overlay.data);
-    }
-
-    headingMarkerRef.current?.setLngLat([overlay.headingPoint.lng, overlay.headingPoint.lat]);
+    source?.setData(overlay);
+    mainMarkerRef.current?.setLngLat([propsRef.current.landingPoint.lng, propsRef.current.landingPoint.lat]);
   }
 
   useEffect(() => {
@@ -523,11 +946,16 @@ export function MapPanel({
           return;
         }
 
+        const center: [number, number] =
+          props.variant === "manual"
+            ? [props.touchdown.lng, props.touchdown.lat]
+            : [props.landingPoint.lng, props.landingPoint.lat];
+
         const map = new maplibregl.Map({
           container: mapContainerRef.current,
           style: resolveMapStyle(),
-          center: [touchdown.lng, touchdown.lat],
-          zoom: 16,
+          center,
+          zoom: 15,
         });
 
         map.on("error", (event) => {
@@ -552,56 +980,93 @@ export function MapPanel({
           if (Date.now() < ignoreClickUntilMsRef.current) {
             return;
           }
-          onTouchdownChange(event.lngLat.lat, event.lngLat.lng);
+
+          const currentManual = getCurrentManualProps();
+          if (currentManual) {
+            currentManual.onTouchdownChange(event.lngLat.lat, event.lngLat.lng);
+            return;
+          }
+
+          const currentAuto = getCurrentAutoProps();
+          currentAuto?.onLandingPointChange(event.lngLat.lat, event.lngLat.lng);
         });
 
-        const touchdownMarker = new maplibregl.Marker({
-          draggable: true,
-          color: "#ef4444",
-        })
-          .setLngLat([touchdown.lng, touchdown.lat])
-          .addTo(map);
+        if (props.variant === "manual") {
+          const touchdownMarker = new maplibregl.Marker({
+            draggable: true,
+            color: "#ef4444",
+          })
+            .setLngLat([props.touchdown.lng, props.touchdown.lat])
+            .addTo(map);
 
-        touchdownMarker.on("dragstart", () => {
-          ignoreClickUntilMsRef.current = Date.now() + 400;
-        });
+          touchdownMarker.on("dragstart", () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+          });
 
-        touchdownMarker.on("dragend", () => {
-          ignoreClickUntilMsRef.current = Date.now() + 400;
-          const lngLat = touchdownMarker.getLngLat();
-          onTouchdownChange(lngLat.lat, lngLat.lng);
-        });
+          touchdownMarker.on("dragend", () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+            const lngLat = touchdownMarker.getLngLat();
+            getCurrentManualProps()?.onTouchdownChange(lngLat.lat, lngLat.lng);
+          });
 
-        const headingPoint = destinationPoint(
-          touchdownRef.current.lat,
-          touchdownRef.current.lng,
-          landingHeadingDegRef.current,
-          headingHandleDistanceMeters,
-        );
+          const headingPoint = destinationPoint(
+            props.touchdown.lat,
+            props.touchdown.lng,
+            props.landingHeadingDeg,
+            headingHandleDistanceMeters,
+          );
 
-        const headingMarker = new maplibregl.Marker({
-          draggable: true,
-          color: "#f59e0b",
-        })
-          .setLngLat([headingPoint.lng, headingPoint.lat])
-          .addTo(map);
+          const headingMarker = new maplibregl.Marker({
+            draggable: true,
+            color: "#f59e0b",
+          })
+            .setLngLat([headingPoint.lng, headingPoint.lat])
+            .addTo(map);
 
-        const updateHeadingFromMarker = () => {
-          ignoreClickUntilMsRef.current = Date.now() + 400;
-          const lngLat = headingMarker.getLngLat();
-          const heading = headingFromPoints(touchdownRef.current, { lat: lngLat.lat, lng: lngLat.lng });
-          onHeadingChange(heading);
-        };
+          const updateHeadingFromMarker = () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+            const current = getCurrentManualProps();
+            if (!current) {
+              return;
+            }
+            const lngLat = headingMarker.getLngLat();
+            const heading = headingFromPoints(current.touchdown, {
+              lat: lngLat.lat,
+              lng: lngLat.lng,
+            });
+            current.onHeadingChange(heading);
+          };
 
-        headingMarker.on("dragstart", () => {
-          ignoreClickUntilMsRef.current = Date.now() + 400;
-        });
-        headingMarker.on("drag", updateHeadingFromMarker);
-        headingMarker.on("dragend", updateHeadingFromMarker);
+          headingMarker.on("dragstart", () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+          });
+          headingMarker.on("drag", updateHeadingFromMarker);
+          headingMarker.on("dragend", updateHeadingFromMarker);
+
+          mainMarkerRef.current = touchdownMarker;
+          headingMarkerRef.current = headingMarker;
+        } else {
+          const landingMarker = new maplibregl.Marker({
+            draggable: true,
+            color: "#ef4444",
+          })
+            .setLngLat([props.landingPoint.lng, props.landingPoint.lat])
+            .addTo(map);
+
+          landingMarker.on("dragstart", () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+          });
+
+          landingMarker.on("dragend", () => {
+            ignoreClickUntilMsRef.current = Date.now() + 400;
+            const lngLat = landingMarker.getLngLat();
+            getCurrentAutoProps()?.onLandingPointChange(lngLat.lat, lngLat.lng);
+          });
+
+          mainMarkerRef.current = landingMarker;
+        }
 
         mapRef.current = map;
-        markerRef.current = touchdownMarker;
-        headingMarkerRef.current = headingMarker;
       } catch (error) {
         setMapError(String(error));
       }
@@ -611,10 +1076,10 @@ export function MapPanel({
 
     return () => {
       cancelled = true;
-      markerRef.current?.remove();
+      mainMarkerRef.current?.remove();
       headingMarkerRef.current?.remove();
       mapRef.current?.remove();
-      markerRef.current = null;
+      mainMarkerRef.current = null;
       headingMarkerRef.current = null;
       mapRef.current = null;
     };
@@ -626,30 +1091,32 @@ export function MapPanel({
     }
 
     const map = mapRef.current;
-    markerRef.current?.setLngLat([touchdown.lng, touchdown.lat]);
+    const points =
+      props.variant === "manual"
+        ? getManualFitPoints(props.touchdown, props.waypoints)
+        : getAutoFitPoints(props);
 
-    if (shouldFitPatternInView(map, touchdown, waypoints)) {
-      fitPatternInView(map, touchdown, waypoints);
-    } else {
-      map.easeTo({ center: [touchdown.lng, touchdown.lat], duration: 350 });
+    if (shouldFitPointsInView(map, points)) {
+      fitPointsInView(map, points, props.variant === "manual" ? props.touchdown : props.landingPoint);
     }
+
     syncOverlay(map);
 
-    if (map.getLayer("pattern-line")) {
-      map.setPaintProperty(
-        "pattern-line",
-        "line-color",
-        blocked ? "#b91c1c" : hasWarnings ? "#d97706" : "#16a34a",
-      );
+    const color = activeRouteColor(props.blocked, props.hasWarnings);
+    const routeLayerId = props.variant === "manual" ? "pattern-line" : "route-line";
+    if (map.getLayer(routeLayerId)) {
+      map.setPaintProperty(routeLayerId, "line-color", color);
     }
-  }, [touchdown.lat, touchdown.lng, waypoints, landingHeadingDeg, blocked, hasWarnings]);
+  }, [props.variant, syncSignature]);
 
   if (isHeadlessEnvironment()) {
+    const point = props.variant === "manual" ? props.touchdown : props.landingPoint;
+    const label = props.variant === "manual" ? t.touchdown : t.landingPoint;
     return (
       <div className="map-fallback" data-testid="map-fallback">
         <p>{t.mapDisabledHeadless}</p>
         <p>
-          {t.touchdown}: {touchdown.lat.toFixed(5)}, {touchdown.lng.toFixed(5)}
+          {label}: {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
         </p>
       </div>
     );
@@ -661,7 +1128,7 @@ export function MapPanel({
       <div ref={mapContainerRef} className="map-container" />
       <div className="map-legend">
         <h3>{t.windLayers}</h3>
-        {windLayers.map((layer, index) => (
+        {props.windLayers.map((layer, index) => (
           <div className="map-legend-row" key={`${index}-${layer.altitudeFt}`}>
             <span
               className="map-legend-arrow"

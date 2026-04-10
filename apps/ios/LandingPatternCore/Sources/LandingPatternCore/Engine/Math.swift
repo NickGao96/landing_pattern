@@ -49,6 +49,10 @@ func knotsToFeetPerSecond(_ knots: Double) -> Double {
     (knots * feetPerNauticalMile) / 3600
 }
 
+func feetPerSecondToKnots(_ fps: Double) -> Double {
+    (fps * 3600) / feetPerNauticalMile
+}
+
 func dot(_ a: Vec2, _ b: Vec2) -> Double {
     a.east * b.east + a.north * b.north
 }
@@ -64,7 +68,7 @@ func lerpAngleDeg(_ a: Double, _ b: Double, _ t: Double) -> Double {
     return normalizeHeading(start + delta * t)
 }
 
-func getWindForAltitude(_ altitudeFt: Double, winds: [WindLayer]) -> WindLayer? {
+public func getWindForAltitude(_ altitudeFt: Double, winds: [WindLayer]) -> WindLayer? {
     guard !winds.isEmpty else { return nil }
 
     let sorted = winds.sorted { $0.altitudeFt > $1.altitudeFt }
@@ -103,4 +107,12 @@ func localFeetToLatLng(refLat: Double, refLng: Double, eastFt: Double, northFt: 
     let feetPerDegLng = feetPerDegLat * max(cosLat, 1e-5)
     let lng = refLng + eastFt / feetPerDegLng
     return (lat: lat, lng: lng)
+}
+
+func latLngToLocalFeet(refLat: Double, refLng: Double, lat: Double, lng: Double) -> (eastFt: Double, northFt: Double) {
+    let northFt = (lat - refLat) * feetPerDegLat
+    let cosLat = cos(refLat * .pi / 180)
+    let feetPerDegLng = feetPerDegLat * max(cosLat, 1e-5)
+    let eastFt = (lng - refLng) * feetPerDegLng
+    return (eastFt: eastFt, northFt: northFt)
 }

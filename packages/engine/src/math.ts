@@ -132,3 +132,16 @@ export function localFeetToLatLng(
   const lng = refLng + eastFt / feetPerDegLng;
   return { lat, lng };
 }
+
+export function latLngToLocalFeet(
+  refLat: number,
+  refLng: number,
+  lat: number,
+  lng: number,
+): { eastFt: number; northFt: number } {
+  const northFt = (lat - refLat) * FEET_PER_DEG_LAT;
+  const cosLat = Math.cos((refLat * Math.PI) / 180);
+  const feetPerDegLng = FEET_PER_DEG_LAT * Math.max(cosLat, 1e-5);
+  const eastFt = (lng - refLng) * feetPerDegLng;
+  return { eastFt, northFt };
+}
