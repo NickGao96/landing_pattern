@@ -53,6 +53,10 @@ const mapTexts: Record<
     landingPoint: string;
     mapFallbackActive: string;
     windLayers: string;
+    autoOverlays: string;
+    headwindNoDeployZone: string;
+    jumpRunCorridor: string;
+    wingsuitRoute: string;
     from: string;
   }
 > = {
@@ -62,6 +66,10 @@ const mapTexts: Record<
     landingPoint: "Landing Point",
     mapFallbackActive: "Map fallback active",
     windLayers: "Wind Layers",
+    autoOverlays: "Auto Overlays",
+    headwindNoDeployZone: "Headwind no-deploy zone",
+    jumpRunCorridor: "Jump-run corridor",
+    wingsuitRoute: "Wingsuit route",
     from: "from",
   },
   zh: {
@@ -70,6 +78,10 @@ const mapTexts: Record<
     landingPoint: "着陆点",
     mapFallbackActive: "地图回退样式已启用",
     windLayers: "分层风",
+    autoOverlays: "自动图层",
+    headwindNoDeployZone: "迎风禁开伞半区",
+    jumpRunCorridor: "航线走廊",
+    wingsuitRoute: "翼装航线",
     from: "来自",
   },
 };
@@ -323,16 +335,9 @@ function buildAutoOverlayFeatures(props: AutoMapPanelProps): GeoJSON.FeatureColl
     });
   }
 
-  if (props.feasibleDeployRegionPolygon.length >= 3) {
-    features.push({
-      type: "Feature",
-      properties: { kind: "deploy-region" },
-      geometry: {
-        type: "Polygon",
-        coordinates: [closePolygon(props.feasibleDeployRegionPolygon)],
-      },
-    });
-  }
+  // Forward auto mode currently returns sparse sampled deploy bands, not a
+  // reliable continuous contour. Keep that diagnostic out of the map until the
+  // solver emits a proper visible envelope.
 
   if (props.resolvedJumpRun) {
     features.push({
@@ -493,7 +498,6 @@ function getAutoFitPoints(props: AutoMapPanelProps): GeoPoint[] {
     ...props.landingNoDeployZonePolygon,
     ...props.downwindDeployForbiddenZonePolygon,
     ...props.forbiddenZonePolygon,
-    ...props.feasibleDeployRegionPolygon,
   ];
 }
 
@@ -593,8 +597,8 @@ function ensureOverlayLayers(map: MapLibreMap, overlayData: GeoJSON.FeatureColle
     source: overlaySourceId,
     filter: ["==", ["get", "kind"], "downwind-deploy-forbidden-zone"],
     paint: {
-      "fill-color": "#f59e0b",
-      "fill-opacity": 0.05,
+      "fill-color": "#f97316",
+      "fill-opacity": 0.18,
     },
   });
 
@@ -605,7 +609,7 @@ function ensureOverlayLayers(map: MapLibreMap, overlayData: GeoJSON.FeatureColle
     filter: ["==", ["get", "kind"], "deploy-region"],
     paint: {
       "fill-color": "#16a34a",
-      "fill-opacity": 0.14,
+      "fill-opacity": 0.2,
     },
   });
 
@@ -629,6 +633,19 @@ function ensureOverlayLayers(map: MapLibreMap, overlayData: GeoJSON.FeatureColle
       "line-color": "#ef4444",
       "line-width": 2,
       "line-dasharray": [2, 2],
+    },
+  });
+
+  addLayerIfMissing(map, {
+    id: "downwind-deploy-forbidden-zone-outline",
+    type: "line",
+    source: overlaySourceId,
+    filter: ["==", ["get", "kind"], "downwind-deploy-forbidden-zone"],
+    paint: {
+      "line-color": "#fb923c",
+      "line-width": 2.5,
+      "line-opacity": 0.95,
+      "line-dasharray": [3, 2],
     },
   });
 
@@ -1127,7 +1144,9 @@ export function MapPanel(props: MapPanelProps) {
       {mapError ? <p className="map-warning">{t.mapFallbackActive}: {mapError}</p> : null}
       <div ref={mapContainerRef} className="map-container" />
       <div className="map-legend">
-        <h3>{t.windLayers}</h3>
+        <div className="map-legend-section">
+          <h3>{t.windLayers}</h3>
+        </div>
         {props.windLayers.map((layer, index) => (
           <div className="map-legend-row" key={`${index}-${layer.altitudeFt}`}>
             <span
@@ -1142,6 +1161,29 @@ export function MapPanel(props: MapPanelProps) {
             <span>{t.from} {Math.round(layer.dirFromDeg)}°</span>
           </div>
         ))}
+        {props.variant === "auto" ? (
+          <div className="map-legend-section">
+            <h3>{t.autoOverlays}</h3>
+            {props.downwindDeployForbiddenZonePolygon.length >= 3 ? (
+              <div className="map-legend-overlay-row">
+                <span className="map-legend-swatch swatch-headwind-no-deploy" aria-hidden />
+                <span>{t.headwindNoDeployZone}</span>
+              </div>
+            ) : null}
+            {props.forbiddenZonePolygon.length >= 3 ? (
+              <div className="map-legend-overlay-row">
+                <span className="map-legend-swatch swatch-jump-run-corridor" aria-hidden />
+                <span>{t.jumpRunCorridor}</span>
+              </div>
+            ) : null}
+            {props.routeWaypoints.length >= 2 ? (
+              <div className="map-legend-overlay-row">
+                <span className="map-legend-swatch swatch-wingsuit-route" aria-hidden />
+                <span>{t.wingsuitRoute}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

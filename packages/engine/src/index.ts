@@ -39,8 +39,11 @@ const MIN_FINAL_FORWARD_GROUND_SPEED_KT = 5;
 const AIRSPEED_MIN_KT = 8;
 const AIRSPEED_MAX_KT = 35;
 const EPSILON = 1e-6;
-const AUTO_HEADING_COARSE_STEP_DEG = 5;
-const AUTO_HEADING_FINE_SPAN_DEG = 4;
+const FORWARD_INTEGRATION_MAX_STEP_SEC = 5;
+const FORWARD_CANOPY_AIRSPEED_KT = 25;
+const FORWARD_CANOPY_GLIDE_RATIO = 2.5;
+const FORWARD_CANOPY_DEPLOYMENT_LOSS_FT = 300;
+const FORWARD_CANOPY_PATTERN_RESERVE_FT = 1000;
 
 export const DEFAULT_WINGSUIT_AUTO_TURN_RATIOS: WingsuitAutoTurnRatios = {
   turn1: 0.75,
@@ -90,20 +93,6 @@ const JUMP_RUN_CROSSWIND_TABLE: Array<{ maxWindKt: number; offsetMiles: number }
   { maxWindKt: Number.POSITIVE_INFINITY, offsetMiles: 0.35 },
 ];
 
-const AUTO_ROUTE_PLACEHOLDER_CANOPY: PatternInput["canopy"] = {
-  manufacturer: "Auto Placeholder",
-  model: "Auto Placeholder",
-  sizeSqft: 170,
-  wlRef: 1,
-  airspeedRefKt: 20,
-  glideRatio: 2.7,
-};
-
-const AUTO_ROUTE_PLACEHOLDER_JUMPER: PatternInput["jumper"] = {
-  exitWeightLb: 170,
-  canopyAreaSqft: 170,
-};
-
 interface LocalPoint {
   eastFt: number;
   northFt: number;
@@ -130,12 +119,14 @@ interface CandidateEvaluation {
   routeSegments: PatternOutput["segments"];
   warnings: string[];
   exitToJumpRunErrorFt: number;
-  firstSlickReturnMarginFt: number;
-  lastSlickReturnMarginFt: number;
+  firstSlickReturnMarginFt: number | null;
+  lastSlickReturnMarginFt: number | null;
   corridorMarginFt: number;
   deployRadiusMarginFt: number;
   firstLegTrackDeltaDeg: number;
   exitAlongTargetErrorFt: number;
+  canopyReturnMarginFt: number;
+  shapePenalty: number;
 }
 
 interface AutoGateCandidate {
@@ -167,6 +158,29 @@ interface SegmentDefinition {
   solveKind: "drift" | "trackLocked";
 }
 
+interface ForwardRouteLeg {
+  name: SegmentName;
+  headingDeg: number;
+  startAltFt: number;
+  endAltFt: number;
+}
+
+interface ForwardRouteLegResult {
+  segment: SegmentComputation;
+  start: LocalPoint;
+  end: LocalPoint;
+}
+
+interface ForwardRouteLegSolveResult {
+  leg: ForwardRouteLegResult | null;
+  blockedReason?: string;
+}
+
+interface ForwardRouteEvaluation {
+  candidate: CandidateEvaluation | null;
+  rejectionReason: string | null;
+}
+
 interface ResolvedJumpRunPlan {
   resolved: ResolvedJumpRun;
   frame: JumpRunFrame;
@@ -177,8 +191,8 @@ interface ResolvedJumpRunPlan {
   constrainedHeadingApplied: boolean;
   headwindComponentKt: number;
   crosswindComponentKt: number;
-  firstSlickReturnMarginFt: number;
-  lastSlickReturnMarginFt: number;
+  firstSlickReturnMarginFt: number | null;
+  lastSlickReturnMarginFt: number | null;
   preferredSpotOffsetAlongFt: number;
   warnings: string[];
   blockedReason: string | null;
@@ -737,10 +751,6 @@ function interpolateLocalPoint(start: LocalPoint, end: LocalPoint, t: number): L
   };
 }
 
-function distanceBetweenLocalPointsFt(a: LocalPoint, b: LocalPoint): number {
-  return localPointMagnitude(localPointDifference(a, b));
-}
-
 function lookupJumpRunSpotOffsetFt(componentKt: number): number {
   const absComponentKt = Math.abs(componentKt);
   const bucket = JUMP_RUN_SPOT_TABLE.find((entry) => absComponentKt <= entry.maxWindKt);
@@ -790,19 +800,22 @@ function resolveJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | nul
   const preferredSpotOffsetAlongFt = lookupJumpRunSpotOffsetFt(headwindComponentKt);
   const crosswindOffsetFt = -lookupJumpRunCrosswindOffsetFt(crosswindComponentKt);
 
-  const slickGroupCount = Math.max(1, assumptions.groupCount - 1);
-  const slickSpanFt = assumptions.groupSeparationFt * Math.max(0, slickGroupCount - 1);
+  const priorSlickGroupCount = Math.max(0, assumptions.groupCount - 1);
+  const slickSpanFt = assumptions.groupSeparationFt * Math.max(0, priorSlickGroupCount - 1);
   const lineLengthFt = assumptions.groupSeparationFt * assumptions.groupCount;
   const lineOffset = scaleLocalPoint(leftUnit, crosswindOffsetFt);
   const slickCenterAlongMinFt = -assumptions.slickReturnRadiusFt + slickSpanFt / 2;
   const slickCenterAlongMaxFt = assumptions.slickReturnRadiusFt - slickSpanFt / 2;
   const preferredSlickCenterAlongFt = preferredSpotOffsetAlongFt + assumptions.groupSeparationFt;
   const slickCenterAlongFt = clamp(preferredSlickCenterAlongFt, slickCenterAlongMinFt, slickCenterAlongMaxFt);
-  const firstSlickExitAlongFt = slickCenterAlongFt - slickSpanFt / 2;
-  const lastSlickExitAlongFt = slickCenterAlongFt + slickSpanFt / 2;
+  const firstSlickExitAlongFt =
+    priorSlickGroupCount > 0 ? slickCenterAlongFt - slickSpanFt / 2 : null;
+  const lastSlickExitAlongFt =
+    priorSlickGroupCount > 0 ? slickCenterAlongFt + slickSpanFt / 2 : null;
+  const firstSlotAlongFt = firstSlickExitAlongFt ?? preferredSpotOffsetAlongFt;
   const startLocal = localPointAdd(
     lineOffset,
-    scaleLocalPoint(jumpRunUnit, firstSlickExitAlongFt - assumptions.groupSeparationFt),
+    scaleLocalPoint(jumpRunUnit, firstSlotAlongFt - assumptions.groupSeparationFt),
   );
   const endLocal = localPointAdd(startLocal, scaleLocalPoint(jumpRunUnit, lineLengthFt));
   const slots = Array.from({ length: assumptions.groupCount }, (_, index) =>
@@ -841,16 +854,18 @@ function resolveJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | nul
     constrainedHeadingApplied: headingResolution.constrainedHeadingApplied,
     headwindComponentKt,
     crosswindComponentKt,
-    firstSlickReturnMarginFt: assumptions.slickReturnRadiusFt - Math.abs(firstSlickExitAlongFt),
-    lastSlickReturnMarginFt: assumptions.slickReturnRadiusFt - Math.abs(lastSlickExitAlongFt),
+    firstSlickReturnMarginFt:
+      firstSlickExitAlongFt == null ? null : assumptions.slickReturnRadiusFt - Math.abs(firstSlickExitAlongFt),
+    lastSlickReturnMarginFt:
+      lastSlickExitAlongFt == null ? null : assumptions.slickReturnRadiusFt - Math.abs(lastSlickExitAlongFt),
     preferredSpotOffsetAlongFt,
     warnings:
       planeGroundSpeedKt <= 45 + EPSILON
         ? ["Aircraft ground speed was clamped to 45 kt for exit-spacing stability."]
         : [],
     blockedReason:
-      slickCenterAlongMaxFt < slickCenterAlongMinFt
-        ? `Jump run cannot fit ${slickGroupCount} slick groups inside the ${assumptions.slickReturnRadiusFt.toFixed(0)} ft return radius.`
+      priorSlickGroupCount > 0 && slickCenterAlongMaxFt < slickCenterAlongMinFt
+        ? `Jump run cannot fit ${priorSlickGroupCount} slick groups inside the ${assumptions.slickReturnRadiusFt.toFixed(0)} ft return radius.`
         : null,
   };
 }
@@ -1090,8 +1105,8 @@ export function validateWingsuitAutoInput(input: WingsuitAutoInput): ValidationR
     if (assumptions.planeAirspeedKt <= 0) {
       errors.push("Plane airspeed must be positive.");
     }
-    if (!Number.isInteger(assumptions.groupCount) || assumptions.groupCount < 2) {
-      errors.push("Group count must be an integer of at least 2.");
+    if (!Number.isInteger(assumptions.groupCount) || assumptions.groupCount < 1) {
+      errors.push("Wingsuit exit group must be an integer of at least 1.");
     }
     if (assumptions.groupSeparationFt <= 0) {
       errors.push("Group separation must be positive.");
@@ -1159,16 +1174,6 @@ function signedHeadingDeltaDeg(fromDeg: number, toDeg: number): number {
 
 function absoluteHeadingDeltaDeg(fromDeg: number, toDeg: number): number {
   return Math.abs(signedHeadingDeltaDeg(fromDeg, toDeg));
-}
-
-function buildBearingSweep(preferredBearingDeg: number, stepDeg: number, windowHalfDeg: number): number[] {
-  const bearings: number[] = [];
-  const count = Math.max(1, Math.floor((windowHalfDeg * 2) / stepDeg));
-  for (let index = 0; index <= count; index += 1) {
-    const offsetDeg = -windowHalfDeg + index * stepDeg;
-    bearings.push(normalizeHeading(preferredBearingDeg + offsetDeg));
-  }
-  return Array.from(new Set(bearings.map((bearing) => Number(bearing.toFixed(6)))));
 }
 
 function buildForbiddenZonePolygon(
@@ -1290,361 +1295,398 @@ function segmentOutsideFiniteCorridor(
   return { valid: true, marginFt: minMarginFt };
 }
 
-function compareCandidatesWithPreferredBearing(
-  a: CandidateEvaluation,
-  b: CandidateEvaluation,
-  preferredBearingDeg: number,
-): number {
-  if (Math.abs(a.exitToJumpRunErrorFt - b.exitToJumpRunErrorFt) > EPSILON) {
-    return a.exitToJumpRunErrorFt - b.exitToJumpRunErrorFt;
-  }
-  if (Math.abs(a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg) > EPSILON) {
-    return a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg;
-  }
-  const aBearingDelta = absoluteHeadingDeltaDeg(preferredBearingDeg, a.bearingDeg);
-  const bBearingDelta = absoluteHeadingDeltaDeg(preferredBearingDeg, b.bearingDeg);
-  if (Math.abs(aBearingDelta - bBearingDelta) > EPSILON) {
-    return aBearingDelta - bBearingDelta;
-  }
-  if (Math.abs(a.corridorMarginFt - b.corridorMarginFt) > EPSILON) {
-    return b.corridorMarginFt - a.corridorMarginFt;
-  }
-  if (Math.abs(a.radiusFt - b.radiusFt) > EPSILON) {
-    return a.radiusFt - b.radiusFt;
-  }
-  return a.exitAlongTargetErrorFt - b.exitAlongTargetErrorFt;
+function isStrictThreeLegGate(candidate: AutoGateCandidate): boolean {
+  const [exitHeightFt, turn1HeightFt, turn2HeightFt, deployHeightFt] = candidate.gatesFt;
+  return exitHeightFt > turn1HeightFt && turn1HeightFt > turn2HeightFt && turn2HeightFt > deployHeightFt;
 }
 
-function compareCandidatesForSameDeploy(a: CandidateEvaluation, b: CandidateEvaluation): number {
-  if (Math.abs(a.exitToJumpRunErrorFt - b.exitToJumpRunErrorFt) > EPSILON) {
-    return a.exitToJumpRunErrorFt - b.exitToJumpRunErrorFt;
-  }
-  if (Math.abs(a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg) > EPSILON) {
-    return a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg;
-  }
-  if (Math.abs(a.corridorMarginFt - b.corridorMarginFt) > EPSILON) {
-    return b.corridorMarginFt - a.corridorMarginFt;
-  }
-  if (Math.abs(a.radiusFt - b.radiusFt) > EPSILON) {
-    return a.radiusFt - b.radiusFt;
-  }
-  return a.exitAlongTargetErrorFt - b.exitAlongTargetErrorFt;
+function uniqueNormalizedHeadings(headings: number[]): number[] {
+  return Array.from(new Set(headings.map((heading) => Number(normalizeHeading(heading).toFixed(6)))));
 }
 
-function evaluateDeployCandidate(
-  input: WingsuitAutoInput,
-  plan: ResolvedJumpRunPlan,
-  gateCandidate: AutoGateCandidate,
-  corridorHalfWidthFt: number,
-  _jumpRunToleranceFt: number,
+function buildFirstLegHeadingCandidates(
+  jumpRunHeadingDeg: number,
+  side: WingsuitAutoInput["side"],
   maxFirstLegTrackDeltaDeg: number,
-  landingHeadingDeg: number,
-  bearingDeg: number,
-  radiusFt: number,
-  maxRadiusFt: number,
-): CandidateEvaluation | null {
-  const landingPoint = input.landingPoint;
-  const frame = plan.frame;
-  const deployLocal = scaleLocalPoint(pointToUnitVector(bearingDeg), radiusFt);
-  if (!pointIsOnSelectedSide(deployLocal, frame, input.side)) {
-    return null;
+): number[] {
+  const sideSign = side === "left" ? -1 : 1;
+  const positiveDeltas = [10, 20, 30, 40, 45]
+    .filter((delta) => delta <= maxFirstLegTrackDeltaDeg + EPSILON);
+  if (maxFirstLegTrackDeltaDeg >= 0 && !positiveDeltas.some((delta) => Math.abs(delta - maxFirstLegTrackDeltaDeg) < EPSILON)) {
+    positiveDeltas.push(maxFirstLegTrackDeltaDeg);
   }
-  if (pointToCorridorMarginFt(frame, deployLocal, corridorHalfWidthFt) <= 0) {
-    return null;
-  }
+  const nonNegativeDeltas = positiveDeltas.filter((delta) => delta >= 0).sort((a, b) => a - b);
+  return uniqueNormalizedHeadings(nonNegativeDeltas.map((delta) => jumpRunHeadingDeg + sideSign * delta));
+}
 
-  const deployGeo = geoPointFromLocal(landingPoint, deployLocal);
-  const routeOutput = computePattern({
-    mode: "wingsuit",
-    touchdownLat: deployGeo.lat,
-    touchdownLng: deployGeo.lng,
-    landingHeadingDeg,
-    side: input.side,
-    baseLegDrift: true,
-    gatesFt: gateCandidate.gatesFt,
-    winds: input.winds,
-    canopy: AUTO_ROUTE_PLACEHOLDER_CANOPY,
-    jumper: AUTO_ROUTE_PLACEHOLDER_JUMPER,
-    wingsuit: input.wingsuit,
-  });
+function buildOffsetHeadingCandidates(
+  jumpRunHeadingDeg: number,
+  side: WingsuitAutoInput["side"],
+): number[] {
+  const sideSign = side === "left" ? -1 : 1;
+  return uniqueNormalizedHeadings([60, 75, 90, 105, 120, 135].map((delta) => jumpRunHeadingDeg + sideSign * delta));
+}
 
-  if (
-    routeOutput.blocked ||
-    routeOutput.waypoints.length < 3 ||
-    routeOutput.waypoints.length > 4 ||
-    routeOutput.segments.length < 2 ||
-    routeOutput.segments.length > 3
-  ) {
-    return null;
-  }
-
-  if (routeOutput.segments.some((segment) => segment.alongLegSpeedKt <= 0)) {
-    return null;
-  }
-
-  const firstSegment = routeOutput.segments[0];
-  if (!firstSegment) {
-    return null;
-  }
-  const jumpRunHeadingDeg = vectorToHeadingDeg({ east: frame.unit.eastFt, north: frame.unit.northFt });
-  const firstLegTrackDeltaDeg = signedHeadingDeltaDeg(jumpRunHeadingDeg, firstSegment.trackHeadingDeg);
-  const firstLegWithinBound =
-    input.side === "left"
-      ? firstLegTrackDeltaDeg >= -maxFirstLegTrackDeltaDeg && firstLegTrackDeltaDeg <= 0
-      : firstLegTrackDeltaDeg >= 0 && firstLegTrackDeltaDeg <= maxFirstLegTrackDeltaDeg;
-  if (!firstLegWithinBound) {
-    return null;
-  }
-
-  const routeWarnings = routeOutput.warnings.filter(
-    (warning) => warning !== "Touchdown gate is expected to be 0 ft AGL in this model.",
+function buildReturnHeadingCandidates(
+  jumpRunHeadingDeg: number,
+  side: WingsuitAutoInput["side"],
+  turn2Local: LocalPoint | null,
+): number[] {
+  const returnSign = side === "left" ? 1 : -1;
+  const headings = [120, 135, 150, 165, 180, 195, 210].map(
+    (delta) => jumpRunHeadingDeg + returnSign * delta,
   );
 
-  const segmentKey = routeOutput.segments.map((segment) => segment.name).join("|");
-  let routeWaypoints: WingsuitAutoWaypoint[] | null = null;
-  if (segmentKey === "downwind|base|final" && routeOutput.waypoints.length === 4) {
-    routeWaypoints = [
-      createAutoWaypoint("exit", routeOutput.waypoints[0]!, gateCandidate.gatesFt[0]),
-      createAutoWaypoint("turn1", routeOutput.waypoints[1]!, gateCandidate.gatesFt[1]),
-      createAutoWaypoint("turn2", routeOutput.waypoints[2]!, gateCandidate.gatesFt[2]),
-      createAutoWaypoint("deploy", routeOutput.waypoints[3]!, gateCandidate.gatesFt[3]),
-    ];
-  } else if (segmentKey === "base|final" && routeOutput.waypoints.length === 3) {
-    routeWaypoints = [
-      createAutoWaypoint("exit", routeOutput.waypoints[0]!, gateCandidate.gatesFt[0]),
-      createAutoWaypoint("turn1", routeOutput.waypoints[0]!, gateCandidate.gatesFt[1]),
-      createAutoWaypoint("turn2", routeOutput.waypoints[1]!, gateCandidate.gatesFt[2]),
-      createAutoWaypoint("deploy", routeOutput.waypoints[2]!, gateCandidate.gatesFt[3]),
-    ];
-  } else if (segmentKey === "downwind|final" && routeOutput.waypoints.length === 3) {
-    routeWaypoints = [
-      createAutoWaypoint("exit", routeOutput.waypoints[0]!, gateCandidate.gatesFt[0]),
-      createAutoWaypoint("turn1", routeOutput.waypoints[1]!, gateCandidate.gatesFt[1]),
-      createAutoWaypoint("turn2", routeOutput.waypoints[1]!, gateCandidate.gatesFt[2]),
-      createAutoWaypoint("deploy", routeOutput.waypoints[2]!, gateCandidate.gatesFt[3]),
-    ];
-  }
-  if (!routeWaypoints) {
-    return null;
+  if (turn2Local && localPointMagnitude(turn2Local) > EPSILON) {
+    const directToLandingDeg = vectorToHeadingDeg({
+      east: -turn2Local.eastFt,
+      north: -turn2Local.northFt,
+    });
+    headings.push(directToLandingDeg, directToLandingDeg - 15, directToLandingDeg + 15);
   }
 
-  const routeLocals = routeWaypoints.map((waypoint) => localPointFromGeoPoint(landingPoint, waypoint));
-  const exitPoint = routeWaypoints[0]!;
-  const turn1Point = routeWaypoints[1]!;
-  const turn2Point = routeWaypoints[2]!;
-  const exitLocal = routeLocals[0]!;
-  const turn1Local = routeLocals[1]!;
-  const turn2Local = routeLocals[2]!;
+  return uniqueNormalizedHeadings(headings);
+}
 
-  const activeTurnAndDeployLocals =
-    segmentKey === "base|final"
-      ? [turn2Local, deployLocal]
-      : segmentKey === "downwind|final"
-        ? [turn1Local, deployLocal]
-        : [turn1Local, turn2Local, deployLocal];
-  const sideOkay = activeTurnAndDeployLocals.every((point) => pointIsOnSelectedSide(point, frame, input.side));
-  if (!sideOkay) {
-    return null;
-  }
-
-  const segmentMarginPairs: Array<[LocalPoint, LocalPoint]> =
-    segmentKey === "base|final"
-      ? [[turn2Local, deployLocal]]
-      : segmentKey === "downwind|final"
-        ? [[turn1Local, deployLocal]]
-        : [[turn1Local, turn2Local], [turn2Local, deployLocal]];
-  const segmentMargins = segmentMarginPairs.map(([startPoint, endPoint]) =>
-    segmentOutsideFiniteCorridor(frame, startPoint, endPoint, corridorHalfWidthFt, input.side),
-  );
-
-  if (segmentMargins.some((margin) => !margin.valid)) {
-    return null;
-  }
-
-  const pointMargins = activeTurnAndDeployLocals.map(
-    (point) => pointToCorridorMarginFt(frame, point, corridorHalfWidthFt),
-  );
-  const corridorMarginFt = Math.min(...pointMargins, ...segmentMargins.map((margin) => margin.marginFt));
-  const resolvedJumpRun = plan.resolved;
-  const exitToJumpRunErrorFt = distanceBetweenLocalPointsFt(exitLocal, plan.targetExitLocal);
-  const deployRadiusMarginFt = maxRadiusFt - radiusFt;
-  const exitAlongTargetErrorFt = exitToJumpRunErrorFt;
-
+function segmentToOutput(segment: SegmentComputation): PatternOutput["segments"][number] {
   return {
-    landingHeadingDeg,
-    bearingDeg,
-    radiusFt,
-    turnHeightsFt: gateCandidate.turnHeightsFt,
-    resolvedJumpRun,
-    deployPoint: routeWaypoints[3]!,
-    exitPoint,
-    turnPoints: [turn1Point, turn2Point],
-    routeWaypoints,
-    routeSegments: routeOutput.segments,
-    warnings: routeWarnings,
-    exitToJumpRunErrorFt,
-    firstSlickReturnMarginFt: plan.firstSlickReturnMarginFt,
-    lastSlickReturnMarginFt: plan.lastSlickReturnMarginFt,
-    corridorMarginFt,
-    deployRadiusMarginFt,
-    firstLegTrackDeltaDeg: Math.abs(firstLegTrackDeltaDeg),
-    exitAlongTargetErrorFt,
+    name: segment.name,
+    headingDeg: segment.headingDeg,
+    trackHeadingDeg: segment.trackHeadingDeg,
+    alongLegSpeedKt: segment.alongLegSpeedKt,
+    groundSpeedKt: segment.groundSpeedKt,
+    timeSec: segment.timeSec,
+    distanceFt: segment.distanceFt,
   };
 }
 
-function findBestHeadingForDeployCandidate(
+function computeForwardDriftLeg(
+  leg: ForwardRouteLeg,
+  startPoint: LocalPoint,
+  winds: WindLayer[],
+  airspeedKt: number,
+  fallRateFps: number,
+): ForwardRouteLegSolveResult {
+  const altitudeLossFt = leg.startAltFt - leg.endAltFt;
+  if (!(altitudeLossFt > 0) || !(fallRateFps > 0)) {
+    return {
+      leg: null,
+      blockedReason: `${leg.name} leg has invalid altitude or fall-rate inputs.`,
+    };
+  }
+
+  const totalTimeSec = altitudeLossFt / fallRateFps;
+  const stepCount = Math.max(1, Math.ceil(totalTimeSec / FORWARD_INTEGRATION_MAX_STEP_SEC));
+  const stepAltitudeLossFt = altitudeLossFt / stepCount;
+  const airUnit = headingToUnitVector(leg.headingDeg);
+  const airVectorKt = scaleVec(airUnit, airspeedKt);
+  let currentPoint = startPoint;
+  let distanceFt = 0;
+
+  for (let index = 0; index < stepCount; index += 1) {
+    const stepStartAltFt = leg.startAltFt - stepAltitudeLossFt * index;
+    const sampleAltFt = stepStartAltFt - stepAltitudeLossFt / 2;
+    const wind = getWindForAltitude(sampleAltFt, winds);
+    const windVectorKt = wind ? windFromToGroundVector(wind.speedKt, wind.dirFromDeg) : { east: 0, north: 0 };
+    const groundVectorKt = addVec(airVectorKt, windVectorKt);
+    const stepTimeSec = stepAltitudeLossFt / fallRateFps;
+    const stepDisplacement = scaleLocalPoint(
+      { eastFt: groundVectorKt.east, northFt: groundVectorKt.north },
+      knotsToFeetPerSecond(1) * stepTimeSec,
+    );
+    currentPoint = localPointAdd(currentPoint, stepDisplacement);
+    distanceFt += localPointMagnitude(stepDisplacement);
+  }
+
+  const totalDisplacement = localPointDifference(currentPoint, startPoint);
+  const averageGroundVectorKt = {
+    east: totalDisplacement.eastFt / Math.max(knotsToFeetPerSecond(1) * totalTimeSec, EPSILON),
+    north: totalDisplacement.northFt / Math.max(knotsToFeetPerSecond(1) * totalTimeSec, EPSILON),
+  };
+  const groundSpeedKt = magnitude(averageGroundVectorKt);
+  if (groundSpeedKt < 0.1) {
+    return {
+      leg: null,
+      blockedReason: `${leg.name} leg has near-zero ground speed.`,
+    };
+  }
+
+  return {
+    leg: {
+      start: startPoint,
+      end: currentPoint,
+      segment: {
+        name: leg.name,
+        headingDeg: leg.headingDeg,
+        trackHeadingDeg: vectorToHeadingDeg(averageGroundVectorKt),
+        alongLegSpeedKt: dot(averageGroundVectorKt, airUnit),
+        groundVectorKt: averageGroundVectorKt,
+        groundSpeedKt,
+        timeSec: totalTimeSec,
+        distanceFt,
+      },
+    },
+  };
+}
+
+function simulateForwardRoute(
+  legs: ForwardRouteLeg[],
+  startPoint: LocalPoint,
+  input: WingsuitAutoInput,
+): { legs: ForwardRouteLegResult[]; blockedReason: string | null } {
+  const results: ForwardRouteLegResult[] = [];
+  let currentPoint = startPoint;
+
+  for (const leg of legs) {
+    const solved = computeForwardDriftLeg(
+      leg,
+      currentPoint,
+      input.winds,
+      input.wingsuit.flightSpeedKt,
+      input.wingsuit.fallRateFps,
+    );
+    if (!solved.leg) {
+      return { legs: results, blockedReason: solved.blockedReason ?? `${leg.name} leg could not be solved.` };
+    }
+    results.push(solved.leg);
+    currentPoint = solved.leg.end;
+  }
+
+  return { legs: results, blockedReason: null };
+}
+
+function previewTurn2Local(
   input: WingsuitAutoInput,
   plan: ResolvedJumpRunPlan,
   gateCandidate: AutoGateCandidate,
-  corridorHalfWidthFt: number,
-  jumpRunToleranceFt: number,
-  maxFirstLegTrackDeltaDeg: number,
-  bearingDeg: number,
-  radiusFt: number,
-  maxRadiusFt: number,
-): CandidateEvaluation | null {
-  let best: CandidateEvaluation | null = null;
-
-  for (let landingHeadingDeg = 0; landingHeadingDeg < 360; landingHeadingDeg += AUTO_HEADING_COARSE_STEP_DEG) {
-    const candidate = evaluateDeployCandidate(
-      input,
-      plan,
-      gateCandidate,
-      corridorHalfWidthFt,
-      jumpRunToleranceFt,
-      maxFirstLegTrackDeltaDeg,
-      landingHeadingDeg,
-      bearingDeg,
-      radiusFt,
-      maxRadiusFt,
-    );
-    if (!candidate) {
-      continue;
-    }
-    if (!best || compareCandidatesForSameDeploy(candidate, best) < 0) {
-      best = candidate;
-    }
-  }
-
-  if (!best) {
-    return null;
-  }
-
-  for (
-    let deltaDeg = -AUTO_HEADING_FINE_SPAN_DEG;
-    deltaDeg <= AUTO_HEADING_FINE_SPAN_DEG;
-    deltaDeg += 1
-  ) {
-    const landingHeadingDeg = normalizeHeading(best.landingHeadingDeg + deltaDeg);
-    const candidate = evaluateDeployCandidate(
-      input,
-      plan,
-      gateCandidate,
-      corridorHalfWidthFt,
-      jumpRunToleranceFt,
-      maxFirstLegTrackDeltaDeg,
-      landingHeadingDeg,
-      bearingDeg,
-      radiusFt,
-      maxRadiusFt,
-    );
-    if (!candidate) {
-      continue;
-    }
-    if (compareCandidatesForSameDeploy(candidate, best) < 0) {
-      best = candidate;
-    }
-  }
-
-  return best;
+  firstLegHeadingDeg: number,
+  offsetHeadingDeg: number,
+): LocalPoint | null {
+  const preview = simulateForwardRoute(
+    [
+      {
+        name: "downwind",
+        headingDeg: firstLegHeadingDeg,
+        startAltFt: gateCandidate.gatesFt[0],
+        endAltFt: gateCandidate.gatesFt[1],
+      },
+      {
+        name: "base",
+        headingDeg: offsetHeadingDeg,
+        startAltFt: gateCandidate.gatesFt[1],
+        endAltFt: gateCandidate.gatesFt[2],
+      },
+    ],
+    plan.targetExitLocal,
+    input,
+  );
+  return preview.blockedReason || preview.legs.length < 2 ? null : preview.legs[1]!.end;
 }
 
-function findBestRouteForDeployCandidate(
-  input: WingsuitAutoInput,
-  plan: ResolvedJumpRunPlan,
-  gateCandidates: AutoGateCandidate[],
-  corridorHalfWidthFt: number,
-  jumpRunToleranceFt: number,
-  maxFirstLegTrackDeltaDeg: number,
-  bearingDeg: number,
-  radiusFt: number,
-  maxRadiusFt: number,
-): CandidateEvaluation | null {
-  let best: CandidateEvaluation | null = null;
-
-  for (const gateCandidate of gateCandidates) {
-    const candidate = findBestHeadingForDeployCandidate(
-      input,
-      plan,
-      gateCandidate,
-      corridorHalfWidthFt,
-      jumpRunToleranceFt,
-      maxFirstLegTrackDeltaDeg,
-      bearingDeg,
-      radiusFt,
-      maxRadiusFt,
-    );
-    if (!candidate) {
-      continue;
-    }
-    if (!best || compareCandidatesForSameDeploy(candidate, best) < 0) {
-      best = candidate;
-    }
-    if (candidate.exitToJumpRunErrorFt <= jumpRunToleranceFt) {
-      return best;
-    }
+function computeCanopyReturnMarginFt(input: WingsuitAutoInput, deployLocal: LocalPoint): number {
+  const distanceFt = localPointMagnitude(deployLocal);
+  if (distanceFt <= EPSILON) {
+    return input.deployHeightFt - FORWARD_CANOPY_DEPLOYMENT_LOSS_FT - FORWARD_CANOPY_PATTERN_RESERVE_FT;
   }
 
-  return best;
+  const returnUnit = normalizeLocalPoint(scaleLocalPoint(deployLocal, -1));
+  const sampleAltFt = Math.max(0, input.deployHeightFt / 2);
+  const wind = getWindForAltitude(sampleAltFt, input.winds);
+  const windVectorKt = wind ? windFromToGroundVector(wind.speedKt, wind.dirFromDeg) : { east: 0, north: 0 };
+  const windAlongKt = dot(windVectorKt, localPointToVec(returnUnit));
+  const groundSpeedKt = FORWARD_CANOPY_AIRSPEED_KT + windAlongKt;
+  if (groundSpeedKt <= 5) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const canopySinkFps = knotsToFeetPerSecond(FORWARD_CANOPY_AIRSPEED_KT) / FORWARD_CANOPY_GLIDE_RATIO;
+  const returnTimeSec = distanceFt / knotsToFeetPerSecond(groundSpeedKt);
+  const altitudeLostFt = FORWARD_CANOPY_DEPLOYMENT_LOSS_FT + canopySinkFps * returnTimeSec;
+  return input.deployHeightFt - FORWARD_CANOPY_PATTERN_RESERVE_FT - altitudeLostFt;
 }
 
-function refineCandidate(
+function computeForwardShapePenalty(
+  input: WingsuitAutoInput,
+  jumpRunHeadingDeg: number,
+  firstLegTrackDeltaDeg: number,
+  offsetHeadingDeg: number,
+  returnHeadingDeg: number,
+  turn2Local: LocalPoint,
+): number {
+  const sideSign = input.side === "left" ? -1 : 1;
+  const preferredOffsetHeadingDeg = normalizeHeading(jumpRunHeadingDeg + sideSign * 90);
+  const directReturnHeadingDeg =
+    localPointMagnitude(turn2Local) > EPSILON
+      ? vectorToHeadingDeg({ east: -turn2Local.eastFt, north: -turn2Local.northFt })
+      : normalizeHeading(jumpRunHeadingDeg + 180);
+
+  return (
+    absoluteHeadingDeltaDeg(offsetHeadingDeg, preferredOffsetHeadingDeg) +
+    absoluteHeadingDeltaDeg(returnHeadingDeg, directReturnHeadingDeg) * 0.35 +
+    Math.abs(firstLegTrackDeltaDeg - Math.min(30, Math.max(0, input.tuning?.maxFirstLegTrackDeltaDeg ?? 30))) * 0.2
+  );
+}
+
+function evaluateForwardRouteCandidate(
   input: WingsuitAutoInput,
   plan: ResolvedJumpRunPlan,
-  gateCandidates: AutoGateCandidate[],
+  gateCandidate: AutoGateCandidate,
   tuning: Required<WingsuitAutoTuning>,
-  preferredBearingDeg: number,
-  bestCandidate: CandidateEvaluation,
-): CandidateEvaluation {
-  let current = bestCandidate;
-  let bearingStepDeg = tuning.deployBearingStepDeg / 2;
-  let radiusStepFt = tuning.deployRadiusStepFt / 2;
-
-  for (let iteration = 0; iteration < tuning.refinementIterations; iteration += 1) {
-    let improved = current;
-
-    for (const bearingDelta of [-bearingStepDeg, 0, bearingStepDeg]) {
-      const nextBearingDeg = normalizeHeading(current.bearingDeg + bearingDelta);
-      const maxRadiusFt = tuning.maxDeployRadiusFt;
-
-      for (const radiusDelta of [-radiusStepFt, 0, radiusStepFt]) {
-        const nextRadiusFt = clamp(current.radiusFt + radiusDelta, tuning.minDeployRadiusFt, maxRadiusFt);
-        const bestRouteCandidate = findBestRouteForDeployCandidate(
-          input,
-          plan,
-          gateCandidates,
-          tuning.corridorHalfWidthFt,
-          tuning.exitOnJumpRunToleranceFt,
-          tuning.maxFirstLegTrackDeltaDeg,
-          nextBearingDeg,
-          nextRadiusFt,
-          maxRadiusFt,
-        );
-        if (!bestRouteCandidate) {
-          continue;
-        }
-        if (compareCandidatesWithPreferredBearing(bestRouteCandidate, improved, preferredBearingDeg) < 0) {
-          improved = bestRouteCandidate;
-        }
-      }
-    }
-
-    current = improved;
-    bearingStepDeg /= 2;
-    radiusStepFt /= 2;
+  firstLegHeadingDeg: number,
+  offsetHeadingDeg: number,
+  returnHeadingDeg: number,
+): ForwardRouteEvaluation {
+  if (!isStrictThreeLegGate(gateCandidate)) {
+    return { candidate: null, rejectionReason: "inactive-leg" };
   }
 
-  return current;
+  const legs: ForwardRouteLeg[] = [
+    {
+      name: "downwind",
+      headingDeg: firstLegHeadingDeg,
+      startAltFt: gateCandidate.gatesFt[0],
+      endAltFt: gateCandidate.gatesFt[1],
+    },
+    {
+      name: "base",
+      headingDeg: offsetHeadingDeg,
+      startAltFt: gateCandidate.gatesFt[1],
+      endAltFt: gateCandidate.gatesFt[2],
+    },
+    {
+      name: "final",
+      headingDeg: returnHeadingDeg,
+      startAltFt: gateCandidate.gatesFt[2],
+      endAltFt: gateCandidate.gatesFt[3],
+    },
+  ];
+  const simulation = simulateForwardRoute(legs, plan.targetExitLocal, input);
+  if (simulation.blockedReason || simulation.legs.length !== 3) {
+    return { candidate: null, rejectionReason: "nonpositive-ground-speed" };
+  }
+
+  const firstSegment = simulation.legs[0]!.segment;
+  const jumpRunHeadingDeg = plan.resolved.headingDeg;
+  const firstLegTrackDeltaDeg = signedHeadingDeltaDeg(jumpRunHeadingDeg, firstSegment.trackHeadingDeg);
+  const firstLegWithinBound =
+    input.side === "left"
+      ? firstLegTrackDeltaDeg >= -tuning.maxFirstLegTrackDeltaDeg && firstLegTrackDeltaDeg <= 0
+      : firstLegTrackDeltaDeg >= 0 && firstLegTrackDeltaDeg <= tuning.maxFirstLegTrackDeltaDeg;
+  if (!firstLegWithinBound) {
+    return { candidate: null, rejectionReason: "first-leg-track" };
+  }
+
+  const turn1Local = simulation.legs[0]!.end;
+  const turn2Local = simulation.legs[1]!.end;
+  const deployLocal = simulation.legs[2]!.end;
+  const checkedPoints = [turn1Local, turn2Local, deployLocal];
+  if (!checkedPoints.every((point) => pointIsOnSelectedSide(point, plan.frame, input.side))) {
+    return { candidate: null, rejectionReason: "selected-side" };
+  }
+
+  const pointMargins = checkedPoints.map((point) =>
+    pointToCorridorMarginFt(plan.frame, point, tuning.corridorHalfWidthFt),
+  );
+  const routeMargins = [
+    segmentOutsideFiniteCorridor(plan.frame, turn1Local, turn2Local, tuning.corridorHalfWidthFt, input.side, 16),
+    segmentOutsideFiniteCorridor(plan.frame, turn2Local, deployLocal, tuning.corridorHalfWidthFt, input.side, 16),
+  ];
+  if (pointMargins.some((margin) => margin <= 0) || routeMargins.some((margin) => !margin.valid)) {
+    return { candidate: null, rejectionReason: "corridor" };
+  }
+
+  const radiusFt = localPointMagnitude(deployLocal);
+  if (radiusFt < tuning.minDeployRadiusFt || radiusFt > tuning.maxDeployRadiusFt) {
+    return { candidate: null, rejectionReason: "deploy-radius" };
+  }
+
+  const canopyReturnMarginFt = computeCanopyReturnMarginFt(input, deployLocal);
+  if (canopyReturnMarginFt < 0) {
+    return { candidate: null, rejectionReason: "canopy-return" };
+  }
+
+  const exitGeo = geoPointFromLocal(input.landingPoint, plan.targetExitLocal);
+  const turn1Geo = geoPointFromLocal(input.landingPoint, turn1Local);
+  const turn2Geo = geoPointFromLocal(input.landingPoint, turn2Local);
+  const deployGeo = geoPointFromLocal(input.landingPoint, deployLocal);
+  const routeWaypoints: WingsuitAutoWaypoint[] = [
+    createAutoWaypoint("exit", exitGeo, gateCandidate.gatesFt[0]),
+    createAutoWaypoint("turn1", turn1Geo, gateCandidate.gatesFt[1]),
+    createAutoWaypoint("turn2", turn2Geo, gateCandidate.gatesFt[2]),
+    createAutoWaypoint("deploy", deployGeo, gateCandidate.gatesFt[3]),
+  ];
+  const corridorMarginFt = Math.min(...pointMargins, ...routeMargins.map((margin) => margin.marginFt));
+  const bearingDeg = vectorToHeadingDeg(localPointToVec(deployLocal));
+  const shapePenalty = computeForwardShapePenalty(
+    input,
+    jumpRunHeadingDeg,
+    Math.abs(firstLegTrackDeltaDeg),
+    offsetHeadingDeg,
+    returnHeadingDeg,
+    turn2Local,
+  );
+
+  return {
+    candidate: {
+      landingHeadingDeg: returnHeadingDeg,
+      bearingDeg,
+      radiusFt,
+      turnHeightsFt: gateCandidate.turnHeightsFt,
+      resolvedJumpRun: plan.resolved,
+      deployPoint: routeWaypoints[3]!,
+      exitPoint: routeWaypoints[0]!,
+      turnPoints: [routeWaypoints[1]!, routeWaypoints[2]!],
+      routeWaypoints,
+      routeSegments: simulation.legs.map((leg) => segmentToOutput(leg.segment)),
+      warnings: [],
+      exitToJumpRunErrorFt: 0,
+      firstSlickReturnMarginFt: plan.firstSlickReturnMarginFt,
+      lastSlickReturnMarginFt: plan.lastSlickReturnMarginFt,
+      corridorMarginFt,
+      deployRadiusMarginFt: tuning.maxDeployRadiusFt - radiusFt,
+      firstLegTrackDeltaDeg: Math.abs(firstLegTrackDeltaDeg),
+      exitAlongTargetErrorFt: 0,
+      canopyReturnMarginFt,
+      shapePenalty,
+    },
+    rejectionReason: null,
+  };
+}
+
+function compareForwardCandidates(a: CandidateEvaluation, b: CandidateEvaluation): number {
+  if (Math.abs(a.canopyReturnMarginFt - b.canopyReturnMarginFt) > 100) {
+    return b.canopyReturnMarginFt - a.canopyReturnMarginFt;
+  }
+  if (Math.abs(a.corridorMarginFt - b.corridorMarginFt) > 50) {
+    return b.corridorMarginFt - a.corridorMarginFt;
+  }
+  if (Math.abs(a.shapePenalty - b.shapePenalty) > EPSILON) {
+    return a.shapePenalty - b.shapePenalty;
+  }
+  if (Math.abs(a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg) > EPSILON) {
+    return a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg;
+  }
+  return a.radiusFt - b.radiusFt;
+}
+
+function addCandidateToBands(
+  bandsByBearing: Map<number, RadiusBand>,
+  candidate: CandidateEvaluation,
+  bearingStepDeg: number,
+): void {
+  const safeStepDeg = Math.max(1, bearingStepDeg);
+  const key = Number(normalizeHeading(Math.round(candidate.bearingDeg / safeStepDeg) * safeStepDeg).toFixed(6));
+  const existing = bandsByBearing.get(key);
+  if (!existing) {
+    bandsByBearing.set(key, {
+      bearingDeg: key,
+      minRadiusFt: candidate.radiusFt,
+      maxRadiusFt: candidate.radiusFt,
+    });
+    return;
+  }
+  existing.minRadiusFt = Math.min(existing.minRadiusFt, candidate.radiusFt);
+  existing.maxRadiusFt = Math.max(existing.maxRadiusFt, candidate.radiusFt);
 }
 
 function emptyAutoOutput(
@@ -1803,163 +1845,108 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
     );
   }
 
-  const searchBearings = buildBearingSweep(
-    preferredBearingDeg,
-    tuning.deployBearingStepDeg,
-    tuning.deployBearingWindowHalfDeg,
-  );
   const validCandidates: CandidateEvaluation[] = [];
-  let nearestMissCandidate: CandidateEvaluation | null = null;
   const bandsByBearing = new Map<number, RadiusBand>();
-  let anyOnSelectedSide = false;
-  let anyOutsideCorridor = false;
-  let anyRouteWithoutFirstLegBound = false;
+  const rejectionCounts = new Map<string, number>();
+  const recordRejection = (reason: string | null): void => {
+    if (!reason) {
+      return;
+    }
+    rejectionCounts.set(reason, (rejectionCounts.get(reason) ?? 0) + 1);
+  };
+  const forwardGateCandidates = gateCandidates.filter(isStrictThreeLegGate);
 
-  for (const bearingDeg of searchBearings) {
-    const maxRadiusFt = tuning.maxDeployRadiusFt;
-    const startRadiusFt = Math.min(maxRadiusFt, Math.max(tuning.minDeployRadiusFt, tuning.deployRadiusStepFt));
-    for (let radiusFt = startRadiusFt; radiusFt <= maxRadiusFt + EPSILON; radiusFt += tuning.deployRadiusStepFt) {
-      const deployLocal = scaleLocalPoint(pointToUnitVector(bearingDeg), radiusFt);
-      if (!pointIsOnSelectedSide(deployLocal, jumpRunFrame, input.side)) {
-        continue;
-      }
-      anyOnSelectedSide = true;
+  for (const gateCandidate of forwardGateCandidates) {
+    const firstLegHeadings = buildFirstLegHeadingCandidates(
+      resolvedPlan.resolved.headingDeg,
+      input.side,
+      tuning.maxFirstLegTrackDeltaDeg,
+    );
+    const offsetHeadings = buildOffsetHeadingCandidates(resolvedPlan.resolved.headingDeg, input.side);
 
-      if (pointToCorridorMarginFt(jumpRunFrame, deployLocal, tuning.corridorHalfWidthFt) <= 0) {
-        continue;
-      }
-      anyOutsideCorridor = true;
-
-      const bestRouteCandidate = findBestRouteForDeployCandidate(
-        input,
-        resolvedPlan,
-        gateCandidates,
-        tuning.corridorHalfWidthFt,
-        tuning.exitOnJumpRunToleranceFt,
-        tuning.maxFirstLegTrackDeltaDeg,
-        bearingDeg,
-        radiusFt,
-        maxRadiusFt,
-      );
-      if (!bestRouteCandidate) {
-        const relaxedFirstLegCandidate = findBestRouteForDeployCandidate(
+    for (const firstLegHeadingDeg of firstLegHeadings) {
+      for (const offsetHeadingDeg of offsetHeadings) {
+        const turn2Preview = previewTurn2Local(
           input,
           resolvedPlan,
-          gateCandidates,
-          tuning.corridorHalfWidthFt,
-          tuning.exitOnJumpRunToleranceFt,
-          180,
-          bearingDeg,
-          radiusFt,
-          maxRadiusFt,
+          gateCandidate,
+          firstLegHeadingDeg,
+          offsetHeadingDeg,
         );
-        if (relaxedFirstLegCandidate) {
-          anyRouteWithoutFirstLegBound = true;
+        const returnHeadings = buildReturnHeadingCandidates(
+          resolvedPlan.resolved.headingDeg,
+          input.side,
+          turn2Preview,
+        );
+
+        for (const returnHeadingDeg of returnHeadings) {
+          const result = evaluateForwardRouteCandidate(
+            input,
+            resolvedPlan,
+            gateCandidate,
+            tuning,
+            firstLegHeadingDeg,
+            offsetHeadingDeg,
+            returnHeadingDeg,
+          );
+          if (!result.candidate) {
+            recordRejection(result.rejectionReason);
+            continue;
+          }
+          validCandidates.push(result.candidate);
+          addCandidateToBands(bandsByBearing, result.candidate, tuning.deployBearingStepDeg);
         }
       }
-      if (!bestRouteCandidate) {
-        continue;
-      }
-
-      if (
-        !nearestMissCandidate ||
-        compareCandidatesWithPreferredBearing(bestRouteCandidate, nearestMissCandidate, preferredBearingDeg) < 0
-      ) {
-        nearestMissCandidate = bestRouteCandidate;
-      }
-
-      if (bestRouteCandidate.exitToJumpRunErrorFt <= tuning.exitOnJumpRunToleranceFt) {
-        validCandidates.push(bestRouteCandidate);
-        const key = Number(normalizeHeading(bearingDeg).toFixed(6));
-        const existing = bandsByBearing.get(key);
-        if (!existing) {
-          bandsByBearing.set(key, {
-            bearingDeg: key,
-            minRadiusFt: radiusFt,
-            maxRadiusFt: radiusFt,
-          });
-        } else {
-          existing.minRadiusFt = Math.min(existing.minRadiusFt, radiusFt);
-          existing.maxRadiusFt = Math.max(existing.maxRadiusFt, radiusFt);
-        }
-      }
-    }
-  }
-
-  if (validCandidates.length === 0 && nearestMissCandidate) {
-    const refinedNearestMiss = refineCandidate(
-      input,
-      resolvedPlan,
-      gateCandidates,
-      tuning,
-      preferredBearingDeg,
-      nearestMissCandidate,
-    );
-    nearestMissCandidate =
-      compareCandidatesWithPreferredBearing(refinedNearestMiss, nearestMissCandidate, preferredBearingDeg) < 0
-        ? refinedNearestMiss
-        : nearestMissCandidate;
-
-    if (nearestMissCandidate.exitToJumpRunErrorFt <= tuning.exitOnJumpRunToleranceFt) {
-      validCandidates.push(nearestMissCandidate);
-      bandsByBearing.set(Number(normalizeHeading(nearestMissCandidate.bearingDeg).toFixed(6)), {
-        bearingDeg: Number(normalizeHeading(nearestMissCandidate.bearingDeg).toFixed(6)),
-        minRadiusFt: nearestMissCandidate.radiusFt,
-        maxRadiusFt: nearestMissCandidate.radiusFt,
-      });
     }
   }
 
   if (validCandidates.length === 0) {
-    let failureReason = "No deploy point survives route solving on the selected side.";
-    if (!anyOnSelectedSide) {
+    let failureReason = "No forward wingsuit route reaches a safe deployment point.";
+    const rejectionEntries = [...rejectionCounts.entries()].sort((a, b) => b[1] - a[1]);
+    const dominantReason = rejectionEntries[0]?.[0] ?? null;
+    if (forwardGateCandidates.length === 0) {
+      failureReason = "No three-leg wingsuit gate layout is available.";
+    } else if (dominantReason === "first-leg-track") {
+      failureReason = `No forward route keeps the first leg within ${tuning.maxFirstLegTrackDeltaDeg.toFixed(0)}° of jump run.`;
+    } else if (dominantReason === "selected-side") {
       failureReason = "No deploy point survives the selected side of jump run.";
-    } else if (!anyOutsideCorridor) {
+    } else if (dominantReason === "corridor") {
       failureReason = "No deploy point survives jump-run corridor exclusion.";
-    } else if (anyRouteWithoutFirstLegBound && !nearestMissCandidate) {
-      failureReason = `No deploy point keeps the first leg within ${tuning.maxFirstLegTrackDeltaDeg.toFixed(0)}° of jump run.`;
-    } else if (nearestMissCandidate) {
-      failureReason = `No deploy point returns exit to the resolved jump run; closest miss is ${nearestMissCandidate.exitToJumpRunErrorFt.toFixed(0)} ft.`;
+    } else if (dominantReason === "deploy-radius") {
+      failureReason = "No forward route reaches deployment inside the configured radius limits.";
+    } else if (dominantReason === "canopy-return") {
+      failureReason = "No forward route leaves enough canopy-return margin from deployment.";
+    } else if (dominantReason === "nonpositive-ground-speed") {
+      failureReason = "No forward route can be integrated through the current wind and wingsuit profile.";
     }
 
     return emptyAutoOutput(
       landingPoint,
-      nearestMissCandidate?.resolvedJumpRun ?? resolvedPlan.resolved,
+      resolvedPlan.resolved,
       landingNoDeployZonePolygon,
       downwindDeployForbiddenZonePolygon,
       forbiddenZonePolygon,
       {
         ...setupDiagnostics,
-        crosswindOffsetFt: nearestMissCandidate?.resolvedJumpRun.crosswindOffsetFt ?? setupDiagnostics.crosswindOffsetFt,
-        firstSlickReturnMarginFt:
-          nearestMissCandidate?.firstSlickReturnMarginFt ?? setupDiagnostics.firstSlickReturnMarginFt,
-        lastSlickReturnMarginFt:
-          nearestMissCandidate?.lastSlickReturnMarginFt ?? setupDiagnostics.lastSlickReturnMarginFt,
+        crosswindOffsetFt: resolvedPlan.resolved.crosswindOffsetFt,
+        firstSlickReturnMarginFt: resolvedPlan.firstSlickReturnMarginFt,
+        lastSlickReturnMarginFt: resolvedPlan.lastSlickReturnMarginFt,
         preferredDeployBearingDeg: preferredBearingDeg,
-        selectedDeployBearingDeg: nearestMissCandidate?.bearingDeg ?? null,
-        selectedDeployRadiusFt: nearestMissCandidate?.radiusFt ?? null,
-        exitToJumpRunErrorFt: nearestMissCandidate?.exitToJumpRunErrorFt ?? null,
-        deployRadiusMarginFt: nearestMissCandidate?.deployRadiusMarginFt ?? null,
-        firstLegTrackDeltaDeg: nearestMissCandidate?.firstLegTrackDeltaDeg ?? null,
-        corridorMarginFt: nearestMissCandidate?.corridorMarginFt ?? null,
-        turnHeightsFt: nearestMissCandidate?.turnHeightsFt ?? turnHeightsFt,
+        selectedDeployBearingDeg: null,
+        selectedDeployRadiusFt: null,
+        exitToJumpRunErrorFt: null,
+        deployRadiusMarginFt: null,
+        firstLegTrackDeltaDeg: null,
+        corridorMarginFt: null,
+        turnHeightsFt,
         failureReason,
       },
       [...validation.warnings, ...resolvedPlan.warnings, failureReason],
     );
   }
 
-  let bestCandidate = validCandidates.reduce((best, candidate) =>
-    compareCandidatesWithPreferredBearing(candidate, best, preferredBearingDeg) < 0 ? candidate : best,
-  );
-
-  bestCandidate = refineCandidate(
-    input,
-    resolvedPlan,
-    gateCandidates,
-    tuning,
-    preferredBearingDeg,
-    bestCandidate,
+  const bestCandidate = validCandidates.reduce((best, candidate) =>
+    compareForwardCandidates(candidate, best) < 0 ? candidate : best,
   );
 
   const deployBandsByBearing = [...bandsByBearing.values()].sort((a, b) => a.bearingDeg - b.bearingDeg);

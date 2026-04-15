@@ -189,7 +189,7 @@ function normalizePersistedAssumptions(
         : defaultWingsuitAutoAssumptions.planeAirspeedKt,
     groupCount:
       typeof assumptions?.groupCount === "number"
-        ? Math.max(2, Math.round(assumptions.groupCount))
+        ? Math.max(1, Math.round(assumptions.groupCount))
         : defaultWingsuitAutoAssumptions.groupCount,
     groupSeparationFt:
       typeof assumptions?.groupSeparationFt === "number"

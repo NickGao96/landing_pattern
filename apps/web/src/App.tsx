@@ -359,13 +359,13 @@ const translations = {
     runwayHeading: "Runway Heading (deg)",
     advancedAssumptions: "Advanced Jump-Run Assumptions",
     planeAirspeed: "Plane Airspeed (kt)",
-    groupCount: "Group Count",
+    groupCount: "Wingsuit Exit Group",
     groupSeparation: "Group Separation",
     slickDeployHeight: "Slick Deploy Height",
     slickFallRate: "Slick Fall Rate",
     slickReturnRadius: "Slick Return Radius",
     jumpRunHelp:
-      "Jump run is resolved automatically from direction intent, winds aloft, and spacing assumptions. Choose auto to use headwind, or manual to set a compass heading. An optional reciprocal runway pair can constrain the heading. The solver then computes crosswind offsite, group spacing, run length, and the resolved slot string before searching deploy within 2 km of landing, on the upwind half, outside the jump-run corridor, with a first leg no more than 45° from jump-run direction, and an exit that returns to the resolved WS slot.",
+      "Jump run is resolved automatically from direction intent, winds aloft, and spacing assumptions. The wingsuit slot defaults to group 4, and can be set to group 1 when wingsuit exits first. Choose auto to use headwind, or manual to set a compass heading. An optional reciprocal runway pair can constrain the heading. The solver then starts at the resolved WS slot, sweeps forward wingsuit routes through the wind layers, and keeps deployments that clear the jump-run corridor, stay on the selected side, fit the configured radius, and preserve canopy-return margin.",
     suggestHeadwindFinal: "Suggest Headwind Final",
     landingDirectionSlider: "Landing Direction Slider",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -536,12 +536,12 @@ const translations = {
     runwayHeading: "跑道航向 (度)",
     advancedAssumptions: "高级航线假设",
     planeAirspeed: "飞机空速 (kt)",
-    groupCount: "编组数量",
+    groupCount: "翼装出舱组号",
     groupSeparation: "组间距",
     slickDeployHeight: "普通跳伞员开伞高度",
     slickFallRate: "普通跳伞员下沉率",
     slickReturnRadius: "普通跳伞员返场半径",
-    jumpRunHelp: "自动模式会根据方向意图、高空风和编组间距假设自动解析航线。可选择自动迎风方向，也可手动输入罗盘方向；还可以用一对往返跑道方向进行约束。求解器随后会计算侧风偏置、组间距、航线长度，以及精确的翼装出舱位，然后再在着陆点 2 公里范围内、迎风半平面内、跳线禁飞走廊之外搜索开伞点，并要求第一段航迹与跳线方向夹角不超过 45 度。",
+    jumpRunHelp: "自动模式会根据方向意图、高空风和编组间距假设自动解析航线。翼装出舱位默认是第 4 组；如果翼装先出舱，可以设为第 1 组。可选择自动迎风方向，也可手动输入罗盘方向；还可以用一对往返跑道方向进行约束。求解器随后会从解析出的翼装出舱位开始，按分层风向前模拟多组翼装航线，并保留能避开航线走廊、保持在所选侧、满足距离限制且保留伞降返场余量的开伞方案。",
     suggestHeadwindFinal: "一键设为迎风着陆航向",
     landingDirectionSlider: "着陆方向滑块",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -1744,6 +1744,7 @@ export default function App() {
                   <label>
                     {t.groupCount}
                     <NumberInput
+                      min="1"
                       step="1"
                       value={jumpRunSettings.assumptions.groupCount}
                       onValueChange={(nextValue) => setWingsuitAutoAssumptions({ groupCount: Math.round(nextValue) })}

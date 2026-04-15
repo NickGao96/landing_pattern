@@ -110,6 +110,10 @@ export type WingsuitAutoJumpRunHeadingSource = "auto-headwind" | "manual";
 
 export interface WingsuitAutoJumpRunAssumptions {
   planeAirspeedKt?: number;
+  /**
+   * One-based wingsuit exit group number. The historical field name is kept for
+   * persisted settings; a value of 4 means the wingsuit slot exits fourth.
+   */
   groupCount?: number;
   groupSeparationFt?: number;
   slickDeployHeightFt?: number;

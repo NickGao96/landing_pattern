@@ -101,6 +101,17 @@ body {
   color: #bae6fd;
 }
 
+.map-legend-section {
+  display: grid;
+  gap: 6px;
+}
+
+.map-legend-section + .map-legend-section {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.45);
+}
+
 .map-legend-row {
   display: grid;
   grid-template-columns: 18px 48px 58px minmax(0, 1fr);
@@ -116,6 +127,36 @@ body {
   font-size: 1rem;
   line-height: 1;
   transform-origin: 50% 50%;
+}
+
+.map-legend-overlay-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.map-legend-swatch {
+  display: inline-block;
+  width: 24px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.swatch-headwind-no-deploy {
+  background: rgba(249, 115, 22, 0.3);
+  border: 2px dashed #fb923c;
+}
+
+.swatch-jump-run-corridor {
+  background: rgba(220, 38, 38, 0.28);
+  border: 2px dashed #ef4444;
+}
+
+.swatch-wingsuit-route {
+  height: 0;
+  border-top: 4px solid #16a34a;
+  border-radius: 0;
 }
 
 .sidebar {

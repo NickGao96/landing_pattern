@@ -327,14 +327,108 @@ describe("wingsuit auto mode", () => {
     expect(output.diagnostics.preferredDeployBearingDeg).toBe(270);
     expect(output.deployPoint).not.toBeNull();
     expect(output.exitPoint).not.toBeNull();
+    const wingsuitSlot = output.resolvedJumpRun?.slots.find((slot) => slot.kind === "wingsuit");
+    expect(wingsuitSlot).toBeDefined();
+    expect(output.exitPoint?.lat ?? 0).toBeCloseTo(wingsuitSlot?.lat ?? 0, 8);
+    expect(output.exitPoint?.lng ?? 0).toBeCloseTo(wingsuitSlot?.lng ?? 0, 8);
     expect(output.diagnostics.selectedDeployRadiusFt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(6562);
-    expect(output.diagnostics.exitToJumpRunErrorFt ?? Number.POSITIVE_INFINITY).toBeLessThan(300);
+    expect(output.diagnostics.exitToJumpRunErrorFt).toBe(0);
     expect(output.diagnostics.deployRadiusMarginFt ?? -1).toBeGreaterThanOrEqual(0);
     expect(output.diagnostics.firstLegTrackDeltaDeg ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(45);
     expect(output.diagnostics.turnHeightsFt?.[0] ?? 0).toBeGreaterThanOrEqual(output.diagnostics.turnHeightsFt?.[1] ?? 0);
     expect(output.diagnostics.turnHeightsFt?.[1] ?? 0).toBeGreaterThan(autoInput.deployHeightFt);
     expect(output.warnings.some((warning) => warning.includes("Exit remains"))).toBe(false);
     expect(output.resolvedJumpRun?.slots).toHaveLength(4);
+  });
+
+  it("allows the wingsuit slot to exit first", () => {
+    const validation = validateWingsuitAutoInput({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        assumptions: {
+          ...autoInput.jumpRun.assumptions,
+          groupCount: 1,
+        },
+      },
+    });
+    expect(validation.valid).toBe(true);
+
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        assumptions: {
+          ...autoInput.jumpRun.assumptions,
+          groupCount: 1,
+        },
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.resolvedJumpRun?.slots).toHaveLength(1);
+    expect(output.resolvedJumpRun?.lengthFt).toBe(1500);
+    expect(output.resolvedJumpRun?.slots[0]?.label).toBe("WS");
+    expect(output.resolvedJumpRun?.slots[0]?.kind).toBe("wingsuit");
+    expect(output.diagnostics.firstSlickReturnMarginFt).toBeNull();
+    expect(output.diagnostics.lastSlickReturnMarginFt).toBeNull();
+    expect(output.exitPoint?.lat ?? 0).toBeCloseTo(output.resolvedJumpRun?.slots[0]?.lat ?? 0, 8);
+    expect(output.exitPoint?.lng ?? 0).toBeCloseTo(output.resolvedJumpRun?.slots[0]?.lng ?? 0, 8);
+  });
+
+  it("moves the wingsuit slot to a custom exit group", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        assumptions: {
+          ...autoInput.jumpRun.assumptions,
+          groupCount: 5,
+        },
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.resolvedJumpRun?.lengthFt).toBe(7500);
+    expect(output.resolvedJumpRun?.slots.map((slot) => slot.label)).toEqual(["G1", "G2", "G3", "G4", "WS"]);
+    expect(output.resolvedJumpRun?.slots.map((slot) => slot.kind)).toEqual([
+      "group",
+      "group",
+      "group",
+      "group",
+      "wingsuit",
+    ]);
+    expect(output.exitPoint?.lat ?? 0).toBeCloseTo(output.resolvedJumpRun?.slots[4]?.lat ?? 0, 8);
+    expect(output.exitPoint?.lng ?? 0).toBeCloseTo(output.resolvedJumpRun?.slots[4]?.lng ?? 0, 8);
+  });
+
+  it("rejects nonpositive wingsuit exit group numbers", () => {
+    const validation = validateWingsuitAutoInput({
+      ...autoInput,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        assumptions: {
+          ...autoInput.jumpRun.assumptions,
+          groupCount: 0,
+        },
+      },
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toContain("Wingsuit exit group must be an integer of at least 1.");
+  });
+
+  it("does not depend on reverse-solved exit tolerance", () => {
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      tuning: {
+        ...autoInput.tuning,
+        exitOnJumpRunToleranceFt: 1,
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expect(output.diagnostics.exitToJumpRunErrorFt).toBe(0);
   });
 
   it("uses the low-wind headwind when jump-run direction is automatic", () => {

@@ -213,10 +213,15 @@ describe("App", () => {
     fireEvent.click(screen.getByLabelText("Manual"));
     expect(screen.getByLabelText("Jump Run Direction (deg)")).toBeInTheDocument();
     expect(screen.queryByLabelText("Runway Heading (deg)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced Jump-Run Assumptions"));
+    expect(screen.getByLabelText("Wingsuit Exit Group")).toHaveValue(4);
+    fireEvent.change(screen.getByLabelText("Wingsuit Exit Group"), { target: { value: "1" } });
+    expect(screen.getByLabelText("Wingsuit Exit Group")).toHaveValue(1);
     expect(screen.getByText(/Preferred Deploy Bearing/)).toBeInTheDocument();
     expect(screen.getByText(/Deploy Radius Margin/)).toBeInTheDocument();
     expect(screen.getByText(/First Leg Track Delta/)).toBeInTheDocument();
-    expect(screen.getByText(/crosswind offsite, group spacing, run length/i)).toBeInTheDocument();
+    expect(screen.getByText(/starts at the resolved WS slot/i)).toBeInTheDocument();
+    expect(screen.getByText(/sweeps forward wingsuit routes/i)).toBeInTheDocument();
   });
 
   it("keeps language and units in one display section", () => {
@@ -243,6 +248,16 @@ describe("App", () => {
     expect(nextState.wingsuitAutoSettings.constraintHeadingDeg).toBe(180);
     expect(nextState.wingsuitAutoSettings.assumptions.groupCount).toBe(5);
     expect(nextState.wingsuitAutoSettings.assumptions.groupSeparationFt).toBe(1800);
+  });
+
+  it("keeps wingsuit first-exit group settings valid", () => {
+    const state = useAppStore.getState();
+    state.setWingsuitAutoAssumptions({ groupCount: 1 });
+
+    expect(useAppStore.getState().wingsuitAutoSettings.assumptions.groupCount).toBe(1);
+
+    state.setWingsuitAutoAssumptions({ groupCount: 0 });
+    expect(useAppStore.getState().wingsuitAutoSettings.assumptions.groupCount).toBe(1);
   });
 
   it("imports legacy canopy snapshots into canopy mode", async () => {
