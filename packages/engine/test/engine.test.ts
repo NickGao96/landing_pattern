@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PatternInput, WingsuitAutoInput } from "@landing/ui-types";
 import {
   computePattern,
+  latLngToLocalFeet,
   normalizeHeading,
   solveWingsuitAuto,
   validatePatternInput,
@@ -95,6 +96,35 @@ const autoInput: WingsuitAutoInput = {
     minDeployRadiusFt: 1000,
   },
 };
+
+function absoluteHeadingDeltaDeg(fromDeg: number, toDeg: number): number {
+  return Math.abs(((toDeg - fromDeg + 540) % 360) - 180);
+}
+
+function windNoDeployCenterDeg(input: WingsuitAutoInput): number {
+  const lowestWind = [...input.winds].sort((a, b) => a.altitudeFt - b.altitudeFt)[0]!;
+  return normalizeHeading(lowestWind.dirFromDeg + 180);
+}
+
+function expectDeployBearingsOutsideWindNoDeploy(
+  output: ReturnType<typeof solveWingsuitAuto>,
+  input: WingsuitAutoInput,
+): void {
+  const forbiddenBearingDeg = windNoDeployCenterDeg(input);
+  const halfWidthDeg = input.tuning?.deployBearingWindowHalfDeg ?? 90;
+
+  expect(
+    absoluteHeadingDeltaDeg(
+      output.diagnostics.selectedDeployBearingDeg ?? Number.NaN,
+      forbiddenBearingDeg,
+    ),
+  ).toBeGreaterThan(halfWidthDeg);
+  expect(
+    output.deployBandsByBearing.every(
+      (band) => absoluteHeadingDeltaDeg(band.bearingDeg, forbiddenBearingDeg) > halfWidthDeg,
+    ),
+  ).toBe(true);
+}
 
 describe("math helpers", () => {
   it("normalizes heading", () => {
@@ -339,6 +369,100 @@ describe("wingsuit auto mode", () => {
     expect(output.diagnostics.turnHeightsFt?.[1] ?? 0).toBeGreaterThan(autoInput.deployHeightFt);
     expect(output.warnings.some((warning) => warning.includes("Exit remains"))).toBe(false);
     expect(output.resolvedJumpRun?.slots).toHaveLength(4);
+  });
+
+  it("prefers a rectangular route and avoids close-in deploy points when safer options exist", () => {
+    const output = solveWingsuitAuto(autoInput);
+
+    expect(output.blocked).toBe(false);
+    expect(output.diagnostics.selectedDeployRadiusFt ?? 0).toBeGreaterThan(2500);
+    expectDeployBearingsOutsideWindNoDeploy(output, autoInput);
+    expect(output.routeSegments).toHaveLength(3);
+
+    const jumpRunHeadingDeg = output.resolvedJumpRun?.headingDeg ?? 0;
+    const firstTrack = output.routeSegments[0]?.trackHeadingDeg ?? Number.NaN;
+    const offsetTrack = output.routeSegments[1]?.trackHeadingDeg ?? Number.NaN;
+    const returnTrack = output.routeSegments[2]?.trackHeadingDeg ?? Number.NaN;
+
+    expect(absoluteHeadingDeltaDeg(firstTrack, jumpRunHeadingDeg - 15)).toBeLessThan(25);
+    expect(absoluteHeadingDeltaDeg(offsetTrack, jumpRunHeadingDeg - 90)).toBeLessThan(20);
+    expect(absoluteHeadingDeltaDeg(returnTrack, jumpRunHeadingDeg + 180)).toBeLessThan(25);
+  });
+
+  it("supports distance jump runs with a short gather leg and return toward the landing point", () => {
+    const offsiteDistanceFt = 4000 * 3.280839895;
+    const output = solveWingsuitAuto({
+      ...autoInput,
+      side: "left",
+      jumpRun: {
+        ...autoInput.jumpRun,
+        placementMode: "distance",
+        distanceOffsetFt: offsiteDistanceFt,
+      },
+    });
+
+    expect(output.blocked).toBe(false);
+    expectDeployBearingsOutsideWindNoDeploy(output, autoInput);
+    expect(output.resolvedJumpRun?.headingDeg ?? 0).toBeCloseTo(270, 6);
+    expect(output.diagnostics.normalJumpRunHeadingDeg ?? Number.NaN).toBeCloseTo(0, 6);
+    expect(output.diagnostics.distanceOffsiteFt ?? 0).toBeCloseTo(offsiteDistanceFt, 1);
+    expect(output.resolvedJumpRun?.slots).toHaveLength(1);
+    expect(output.resolvedJumpRun?.slots[0]?.kind).toBe("wingsuit");
+    expect(output.routeSegments).toHaveLength(3);
+
+    const exitLocal = latLngToLocalFeet(
+      autoLanding.lat,
+      autoLanding.lng,
+      output.exitPoint?.lat ?? autoLanding.lat,
+      output.exitPoint?.lng ?? autoLanding.lng,
+    );
+    expect(exitLocal.northFt).toBeGreaterThan(offsiteDistanceFt - 10);
+    expect(exitLocal.eastFt).toBeLessThan(-500);
+
+    const firstTrack = output.routeSegments[0]?.trackHeadingDeg ?? Number.NaN;
+    const returnTrack1 = output.routeSegments[1]?.trackHeadingDeg ?? Number.NaN;
+    const returnTrack2 = output.routeSegments[2]?.trackHeadingDeg ?? Number.NaN;
+
+    expect(output.routeSegments[0]?.distanceFt ?? Number.POSITIVE_INFINITY).toBeLessThan(3200);
+    expect(absoluteHeadingDeltaDeg(firstTrack, 260)).toBeLessThan(35);
+    expect(absoluteHeadingDeltaDeg(returnTrack1, 180)).toBeLessThan(35);
+    expect(absoluteHeadingDeltaDeg(returnTrack2, 180)).toBeLessThan(35);
+  });
+
+  it("keeps web-default normal and distance deploy options out of the wind no-deploy sector", () => {
+    const webDefaultInput: WingsuitAutoInput = {
+      ...autoInput,
+      exitHeightFt: 12000,
+      deployHeightFt: 4000,
+      jumpRun: {
+        ...autoInput.jumpRun,
+        directionMode: "auto",
+      },
+      winds: [
+        { altitudeFt: 12000, speedKt: 28, dirFromDeg: 240, source: "manual" },
+        { altitudeFt: 10000, speedKt: 24, dirFromDeg: 230, source: "manual" },
+        { altitudeFt: 6500, speedKt: 18, dirFromDeg: 220, source: "manual" },
+      ],
+      tuning: {
+        ...autoInput.tuning,
+        deployBearingWindowHalfDeg: 90,
+      },
+    };
+
+    const normalOutput = solveWingsuitAuto(webDefaultInput);
+    const distanceOutput = solveWingsuitAuto({
+      ...webDefaultInput,
+      jumpRun: {
+        ...webDefaultInput.jumpRun,
+        placementMode: "distance",
+        distanceOffsetFt: 4000 * 3.280839895,
+      },
+    });
+
+    expect(normalOutput.blocked).toBe(false);
+    expectDeployBearingsOutsideWindNoDeploy(normalOutput, webDefaultInput);
+    expect(distanceOutput.blocked).toBe(false);
+    expectDeployBearingsOutsideWindNoDeploy(distanceOutput, webDefaultInput);
   });
 
   it("allows the wingsuit slot to exit first", () => {

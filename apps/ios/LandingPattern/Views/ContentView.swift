@@ -356,11 +356,21 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: t.wingsuitSection)
 
-            Picker(t.wingsuitPlanningModeLabel, selection: $store.wingsuitPlanningMode) {
-                Text(t.wingsuitPlanningManual).tag(WingsuitPlanningMode.manual)
-                Text(t.wingsuitPlanningAuto).tag(WingsuitPlanningMode.auto)
+            if store.isWingsuitAutoAvailable {
+                Picker(t.wingsuitPlanningModeLabel, selection: $store.wingsuitPlanningMode) {
+                    Text(t.wingsuitPlanningManual).tag(WingsuitPlanningMode.manual)
+                    Text(t.wingsuitPlanningAuto).tag(WingsuitPlanningMode.auto)
+                }
+                .pickerStyle(.segmented)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(t.wingsuitPlanningModeLabel): \(t.wingsuitPlanningManual)")
+                        .font(.subheadline.weight(.semibold))
+                    Text(t.wingsuitAutoDisabledNotice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .pickerStyle(.segmented)
 
             Picker(
                 t.wingsuitPresetLabel,

@@ -60,6 +60,7 @@ struct AppStrings {
     let wingsuitPlanningModeLabel: String
     let wingsuitPlanningManual: String
     let wingsuitPlanningAuto: String
+    let wingsuitAutoDisabledNotice: String
     let presetLabel: String
     let canopySizeLabel: String
     let exitWeightLabel: String
@@ -167,6 +168,7 @@ struct AppStrings {
         wingsuitPlanningModeLabel: "Planning Mode",
         wingsuitPlanningManual: "Manual",
         wingsuitPlanningAuto: "Auto",
+        wingsuitAutoDisabledNotice: "Wingsuit auto mode is temporarily disabled on iOS.",
         presetLabel: "Preset",
         canopySizeLabel: "Canopy Size (sqft)",
         exitWeightLabel: "Exit Weight (lb)",
@@ -283,6 +285,7 @@ struct AppStrings {
         wingsuitPlanningModeLabel: "规划模式",
         wingsuitPlanningManual: "手动",
         wingsuitPlanningAuto: "自动",
+        wingsuitAutoDisabledNotice: "iOS 版暂时禁用翼装自动模式。",
         presetLabel: "预设",
         canopySizeLabel: "伞翼面积 (sqft)",
         exitWeightLabel: "出舱重量 (lb)",

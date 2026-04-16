@@ -107,6 +107,7 @@ export interface JumpRunLine {
 export type WingsuitAutoJumpRunDirectionMode = "auto" | "manual";
 export type WingsuitAutoJumpRunConstraintMode = "none" | "reciprocal";
 export type WingsuitAutoJumpRunHeadingSource = "auto-headwind" | "manual";
+export type WingsuitAutoJumpRunPlacementMode = "normal" | "distance";
 
 export interface WingsuitAutoJumpRunAssumptions {
   planeAirspeedKt?: number;
@@ -122,10 +123,13 @@ export interface WingsuitAutoJumpRunAssumptions {
 }
 
 export interface WingsuitAutoJumpRunConfig {
+  placementMode?: WingsuitAutoJumpRunPlacementMode;
   directionMode?: WingsuitAutoJumpRunDirectionMode;
   manualHeadingDeg?: number;
   constraintMode?: WingsuitAutoJumpRunConstraintMode;
   constraintHeadingDeg?: number;
+  distanceOffsetFt?: number;
+  distancePostTurnFt?: number;
   assumptions?: WingsuitAutoJumpRunAssumptions;
 }
 
@@ -189,8 +193,11 @@ export interface RadiusBand {
 
 export interface WingsuitAutoDiagnostics {
   headingSource: WingsuitAutoJumpRunHeadingSource | null;
+  placementMode?: WingsuitAutoJumpRunPlacementMode | null;
   constrainedHeadingApplied: boolean;
   resolvedHeadingDeg: number | null;
+  normalJumpRunHeadingDeg?: number | null;
+  distanceOffsiteFt?: number | null;
   headwindComponentKt: number | null;
   crosswindComponentKt: number | null;
   crosswindOffsetFt: number | null;

@@ -58,10 +58,12 @@ beforeEach(async () => {
     },
     wingsuitAutoSettings: {
       planningMode: "manual",
+      placementMode: "normal",
       directionMode: "auto",
       manualHeadingDeg: 0,
       constraintMode: "none",
       constraintHeadingDeg: 0,
+      distanceOffsetFt: 4000 * 3.280839895,
       assumptions: {
         planeAirspeedKt: 85,
         groupCount: 4,
@@ -205,6 +207,9 @@ describe("App", () => {
     expect(screen.getByText("Landing Point")).toBeInTheDocument();
     expect(screen.getByLabelText("Exit Height (ft)")).toBeInTheDocument();
     expect(screen.queryByLabelText("Jump Run Start Lat")).not.toBeInTheDocument();
+    expect(screen.getByText("Jump-Run Placement")).toBeInTheDocument();
+    expect(screen.getByLabelText("Normal")).toBeChecked();
+    expect(screen.getByLabelText("Distance")).toBeInTheDocument();
     expect(screen.getByText("Direction Source")).toBeInTheDocument();
     expect(screen.getByLabelText("Auto (Headwind)")).toBeInTheDocument();
     expect(screen.getByText("Airport Constraint")).toBeInTheDocument();
@@ -222,6 +227,25 @@ describe("App", () => {
     expect(screen.getByText(/First Leg Track Delta/)).toBeInTheDocument();
     expect(screen.getByText(/starts at the resolved WS slot/i)).toBeInTheDocument();
     expect(screen.getByText(/sweeps forward wingsuit routes/i)).toBeInTheDocument();
+  });
+
+  it("shows distance jump-run controls and hides slick group assumptions", () => {
+    renderApp();
+
+    fireEvent.click(screen.getByLabelText("Wingsuit"));
+    fireEvent.click(screen.getByLabelText("Auto Mode"));
+    fireEvent.click(screen.getByLabelText("Distance"));
+
+    expect(screen.getByLabelText("Distance")).toBeChecked();
+    expect(screen.getByText(/continues offsite by the configured distance/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Offsite Distance (ft)")).toHaveValue(13123);
+    expect(screen.getByLabelText("Aircraft Turn Side")).toBeInTheDocument();
+    expect(screen.getAllByText(/Normal Jump Run Heading/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Distance Offsite/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText("Advanced Jump-Run Assumptions"));
+    expect(screen.queryByLabelText("Wingsuit Exit Group")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Plane Airspeed (kt) (kt)")).toBeInTheDocument();
   });
 
   it("keeps language and units in one display section", () => {
@@ -242,6 +266,7 @@ describe("App", () => {
     state.setTouchdown(37.6, -122.143);
 
     const nextState = useAppStore.getState();
+    expect(nextState.wingsuitAutoSettings.placementMode).toBe("normal");
     expect(nextState.wingsuitAutoSettings.directionMode).toBe("manual");
     expect(nextState.wingsuitAutoSettings.manualHeadingDeg).toBe(33);
     expect(nextState.wingsuitAutoSettings.constraintMode).toBe("reciprocal");

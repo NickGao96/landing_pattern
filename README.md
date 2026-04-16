@@ -11,7 +11,8 @@ Local-first skydiving landing-pattern simulator for planning downwind/base/final
   - Warns when final-leg wind penetration is too low.
 - Wingsuit auto mode:
   - Lets the user pick a landing point, jump-run heading intent, and a left/right side.
-  - Resolves jump run automatically from heading intent, wind, and jump-run assumptions.
+  - Resolves normal jump runs from heading intent, wind, and jump-run assumptions.
+  - Adds distance placement for a wingsuit-first run after the aircraft continues offsite and turns 90°.
   - Computes landing no-deploy, downwind deploy-forbidden, and jump-run corridor zones.
   - Solves deploy/turn/exit automatically and only returns a route when exit comes back onto the resolved `WS` slot.
 - NOAA/NWS integration (`packages/data`):
@@ -149,23 +150,28 @@ The user provides:
   - group separation
   - slick deploy height
   - slick return radius
+- optional distance placement
+  - offsite distance, default 4 km
+  - aircraft turn side, coupled to the route turn back toward the landing point
 
 From there, auto mode does the rest:
 
 - resolves jump-run heading from headwind or manual compass input
 - snaps that heading to a runway pair when a reciprocal constraint is enabled
 - computes aircraft ground speed and spacing time from the selected plane speed and winds aloft
-- uses a bounded spot table at slick deploy height to place the run after/before the LZ and a lighter crosswind table to offsite it
-- fits the normal-group span inside the configured slick return radius
-- derives a full resolved jump run and labeled slots (`G1`, `G2`, `G3`, `WS`)
-- uses the lowest wind layer to define the upwind deploy side
-- searches deploy only within 2 km of landing
-- renders a light downwind deploy-forbidden half-space
+- in normal placement, uses a bounded spot table at slick deploy height to place the run after/before the LZ and a lighter crosswind table to offsite it
+- in normal placement, fits the normal-group span inside the configured slick return radius and derives labeled slots (`G1`, `G2`, `G3`, `WS`)
+- in distance placement, continues from the normal run by the configured offsite distance, turns the aircraft 90°, and resolves a single first-out `WS` slot shortly after the turn
+- starts the wingsuit route exactly at the resolved `WS` slot
+- sweeps forward three-leg route candidates through altitude-dependent winds
+- varies exit, offset, and return headings plus intermediate leg lengths
+- renders and enforces a light downwind deploy-forbidden half-space
 - renders a small landing no-deploy circle
 - buffers jump run with a forbidden corridor
-- requires the first active leg to stay within 45° of jump-run direction
-- solves turn points and exit automatically
-- rejects any route that does not return exit to the resolved `WS` slot within tolerance
+- requires the first leg to stay within 45° of jump-run direction on the selected side
+- rejects routes that cross the post-departure jump-run corridor, deploy inside the wind no-deploy sector, or cannot preserve canopy-return margin
+- ranks normal valid routes by saturated safety margin, rectangular ground-track shape, and a soft deploy-distance annulus
+- ranks distance valid routes by saturated safety margin, short gather leg, clean return track, and the same soft deploy-distance annulus
 
 If no solution satisfies those constraints, auto mode blocks and shows diagnostics instead of drawing a misleading pattern.
 

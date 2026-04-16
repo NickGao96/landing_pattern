@@ -171,10 +171,12 @@ function deriveWingsuitAutoTurnRatios(gatesFt: [number, number, number, number])
 function buildWingsuitAutoInput(state: {
   landingPoint: { lat: number; lng: number };
   jumpRun: {
+    placementMode: "normal" | "distance";
     directionMode: "auto" | "manual";
     manualHeadingDeg: number;
     constraintMode: "none" | "reciprocal";
     constraintHeadingDeg: number;
+    distanceOffsetFt: number;
     assumptions: Required<WingsuitAutoJumpRunAssumptions>;
   };
   side: "left" | "right";
@@ -186,7 +188,16 @@ function buildWingsuitAutoInput(state: {
 }): WingsuitAutoInput {
   return {
     landingPoint: state.landingPoint,
-    jumpRun: state.jumpRun,
+    jumpRun: {
+      ...state.jumpRun,
+      assumptions:
+        state.jumpRun.placementMode === "distance"
+          ? {
+              ...state.jumpRun.assumptions,
+              groupCount: 1,
+            }
+          : state.jumpRun.assumptions,
+    },
     side: state.side,
     exitHeightFt: state.wingsuitSettings.gatesFt[0],
     deployHeightFt: state.wingsuitSettings.gatesFt[3],
@@ -350,6 +361,13 @@ const translations = {
     jumpRunLength: "Jump Run Length",
     jumpRunSpacing: "Group Spacing",
     jumpRunSpacingSeconds: "Spacing Time",
+    jumpRunPlacement: "Jump-Run Placement",
+    normalJumpRunPlacement: "Normal",
+    distanceJumpRunPlacement: "Distance",
+    offsiteDistance: "Offsite Distance",
+    distanceTurnSide: "Aircraft Turn Side",
+    normalJumpRunHeading: "Normal Jump Run Heading",
+    distanceOffsite: "Distance Offsite",
     directionSource: "Direction Source",
     autoHeadwindDirection: "Auto (Headwind)",
     manualDirection: "Manual",
@@ -366,6 +384,8 @@ const translations = {
     slickReturnRadius: "Slick Return Radius",
     jumpRunHelp:
       "Jump run is resolved automatically from direction intent, winds aloft, and spacing assumptions. The wingsuit slot defaults to group 4, and can be set to group 1 when wingsuit exits first. Choose auto to use headwind, or manual to set a compass heading. An optional reciprocal runway pair can constrain the heading. The solver then starts at the resolved WS slot, sweeps forward wingsuit routes through the wind layers, and keeps deployments that clear the jump-run corridor, stay on the selected side, fit the configured radius, and preserve canopy-return margin.",
+    distanceJumpRunHelp:
+      "Distance mode keeps the normal slick jump-run direction as the reference, continues offsite by the configured distance, turns the aircraft 90 degrees, and drops the wingsuit first shortly after that turn. The wingsuit route then uses a short gather leg and turns back toward the landing point.",
     suggestHeadwindFinal: "Suggest Headwind Final",
     landingDirectionSlider: "Landing Direction Slider",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -527,6 +547,13 @@ const translations = {
     jumpRunLength: "航线长度",
     jumpRunSpacing: "组间距",
     jumpRunSpacingSeconds: "间隔时间",
+    jumpRunPlacement: "航线布置",
+    normalJumpRunPlacement: "普通",
+    distanceJumpRunPlacement: "拉距",
+    offsiteDistance: "拉距距离",
+    distanceTurnSide: "飞机转弯方向",
+    normalJumpRunHeading: "普通航线方向",
+    distanceOffsite: "拉距距离",
     directionSource: "方向来源",
     autoHeadwindDirection: "自动（迎风）",
     manualDirection: "手动",
@@ -542,6 +569,7 @@ const translations = {
     slickFallRate: "普通跳伞员下沉率",
     slickReturnRadius: "普通跳伞员返场半径",
     jumpRunHelp: "自动模式会根据方向意图、高空风和编组间距假设自动解析航线。翼装出舱位默认是第 4 组；如果翼装先出舱，可以设为第 1 组。可选择自动迎风方向，也可手动输入罗盘方向；还可以用一对往返跑道方向进行约束。求解器随后会从解析出的翼装出舱位开始，按分层风向前模拟多组翼装航线，并保留能避开航线走廊、保持在所选侧、满足距离限制且保留伞降返场余量的开伞方案。",
+    distanceJumpRunHelp: "拉距模式用普通航线方向作为参考，飞机沿该方向继续飞到设定拉距后转 90 度，并在转弯后不久先放翼装。翼装航线会先短距离集合，再转回着陆点方向。",
     suggestHeadwindFinal: "一键设为迎风着陆航向",
     landingDirectionSlider: "着陆方向滑块",
     gateLabel: (mode: FlightMode, index: number, altUnitLabel: string) =>
@@ -666,10 +694,12 @@ export default function App() {
     updateWingsuitWindLayer,
     wingsuitAutoSettings,
     setWingsuitPlanningMode,
+    setWingsuitAutoPlacementMode,
     setWingsuitAutoDirectionMode,
     setWingsuitAutoManualHeading,
     setWingsuitAutoConstraintMode,
     setWingsuitAutoConstraintHeading,
+    setWingsuitAutoDistanceOffset,
     setWingsuitAutoAssumptions,
     namedSpots,
     saveNamedSpot,
@@ -689,6 +719,7 @@ export default function App() {
   const wingsuitPlanningMode = wingsuitAutoSettings.planningMode;
   const isWingsuitAuto = mode === "wingsuit" && wingsuitPlanningMode === "auto";
   const jumpRunSettings = wingsuitAutoSettings;
+  const isDistanceJumpRun = jumpRunSettings.placementMode === "distance";
   const gatesFt = mode === "canopy" ? canopySettings.gatesFt : wingsuitSettings.gatesFt;
   const windLayers = mode === "canopy" ? canopySettings.windLayers : wingsuitSettings.windLayers;
   const wingsuitGlideRatio = useMemo(() => glideRatioForWingsuit(wingsuit), [wingsuit]);
@@ -1032,10 +1063,12 @@ export default function App() {
         };
         wingsuitAutoSettings: {
           planningMode: WingsuitPlanningMode;
+          placementMode?: "normal" | "distance";
           directionMode?: "auto" | "manual";
           manualHeadingDeg?: number;
           constraintMode?: "none" | "reciprocal";
           constraintHeadingDeg?: number;
+          distanceOffsetFt?: number;
           assumptions?: Partial<WingsuitAutoJumpRunAssumptions>;
           jumpRun?: {
             start?: { lat: number; lng: number };
@@ -1113,6 +1146,12 @@ export default function App() {
           setWingsuitPlanningMode(payload.wingsuitAutoSettings.planningMode);
         }
         if (
+          payload.wingsuitAutoSettings.placementMode === "normal" ||
+          payload.wingsuitAutoSettings.placementMode === "distance"
+        ) {
+          setWingsuitAutoPlacementMode(payload.wingsuitAutoSettings.placementMode);
+        }
+        if (
           payload.wingsuitAutoSettings.directionMode === "auto" ||
           payload.wingsuitAutoSettings.directionMode === "manual"
         ) {
@@ -1137,6 +1176,9 @@ export default function App() {
         }
         if (typeof payload.wingsuitAutoSettings.constraintHeadingDeg === "number") {
           setWingsuitAutoConstraintHeading(payload.wingsuitAutoSettings.constraintHeadingDeg);
+        }
+        if (typeof payload.wingsuitAutoSettings.distanceOffsetFt === "number") {
+          setWingsuitAutoDistanceOffset(payload.wingsuitAutoSettings.distanceOffsetFt);
         }
         if (payload.wingsuitAutoSettings.assumptions) {
           setWingsuitAutoAssumptions(payload.wingsuitAutoSettings.assumptions);
@@ -1549,7 +1591,7 @@ export default function App() {
               <>
                 <div className="grid two">
                   <label>
-                    {t.side}
+                    {isDistanceJumpRun ? t.distanceTurnSide : t.side}
                     <select value={side} onChange={(event) => setSide(event.target.value as "left" | "right")}>
                       <option value="left">{t.left}</option>
                       <option value="right">{t.right}</option>
@@ -1657,11 +1699,35 @@ export default function App() {
                 {t.jumpRunHeading}: {jumpRunHeading == null ? "--" : `${jumpRunHeading.toFixed(0)}°`} ·{" "}
                 {t.jumpRunLength}:{" "}
                 {jumpRunLength == null ? "--" : `${toDisplayFeet(unitSystem, jumpRunLength).toFixed(0)} ${altUnitLabel}`}
+                {autoDiagnostics?.placementMode === "distance"
+                  ? ` · ${t.normalJumpRunHeading}: ${formatOptionalDegrees(autoDiagnostics.normalJumpRunHeadingDeg ?? null)} · ${t.distanceOffsite}: ${formatOptionalDistance(autoDiagnostics.distanceOffsiteFt ?? null)}`
+                  : ""}
                 {resolvedJumpRun
                   ? ` · ${t.jumpRunSpacing}: ${toDisplayFeet(unitSystem, resolvedJumpRun.groupSpacingFt).toFixed(0)} ${altUnitLabel} · ${t.jumpRunSpacingSeconds}: ${resolvedJumpRun.groupSpacingSec.toFixed(1)} s`
                   : ""}
               </p>
-              <p className="status">{t.jumpRunHelp}</p>
+              <p className="status">{isDistanceJumpRun ? t.distanceJumpRunHelp : t.jumpRunHelp}</p>
+              <div className="control-cell">
+                <p className="control-title">{t.jumpRunPlacement}</p>
+                <div className="row wrap compact-options">
+                  <label className="option-chip">
+                    <input
+                      type="radio"
+                      checked={jumpRunSettings.placementMode === "normal"}
+                      onChange={() => setWingsuitAutoPlacementMode("normal")}
+                    />
+                    {t.normalJumpRunPlacement}
+                  </label>
+                  <label className="option-chip">
+                    <input
+                      type="radio"
+                      checked={jumpRunSettings.placementMode === "distance"}
+                      onChange={() => setWingsuitAutoPlacementMode("distance")}
+                    />
+                    {t.distanceJumpRunPlacement}
+                  </label>
+                </div>
+              </div>
               <div className="grid two compact-grid">
                 <div className="control-cell">
                   <p className="control-title">{t.directionSource}</p>
@@ -1707,6 +1773,18 @@ export default function App() {
                 </div>
               </div>
               <div className="grid two">
+                {isDistanceJumpRun ? (
+                  <label>
+                    {t.offsiteDistance} ({altUnitLabel})
+                    <NumberInput
+                      min="1"
+                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.distanceOffsetFt))}
+                      onValueChange={(nextValue) =>
+                        setWingsuitAutoDistanceOffset(fromDisplayFeet(unitSystem, nextValue))
+                      }
+                    />
+                  </label>
+                ) : null}
                 {jumpRunSettings.directionMode === "manual" ? (
                   <label>
                     {t.jumpRunDirection}
@@ -1741,50 +1819,54 @@ export default function App() {
                   />
                 </label>
                 <div className="grid two">
-                  <label>
-                    {t.groupCount}
-                    <NumberInput
-                      min="1"
-                      step="1"
-                      value={jumpRunSettings.assumptions.groupCount}
-                      onValueChange={(nextValue) => setWingsuitAutoAssumptions({ groupCount: Math.round(nextValue) })}
-                    />
-                  </label>
-                  <label>
-                    {t.groupSeparation} ({altUnitLabel})
-                    <NumberInput
-                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.groupSeparationFt))}
-                      onValueChange={(nextValue) =>
-                        setWingsuitAutoAssumptions({ groupSeparationFt: fromDisplayFeet(unitSystem, nextValue) })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {t.slickDeployHeight} ({altUnitLabel})
-                    <NumberInput
-                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickDeployHeightFt))}
-                      onValueChange={(nextValue) =>
-                        setWingsuitAutoAssumptions({ slickDeployHeightFt: fromDisplayFeet(unitSystem, nextValue) })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {t.slickReturnRadius} ({altUnitLabel})
-                    <NumberInput
-                      value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickReturnRadiusFt))}
-                      onValueChange={(nextValue) =>
-                        setWingsuitAutoAssumptions({ slickReturnRadiusFt: fromDisplayFeet(unitSystem, nextValue) })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {t.slickFallRate}
-                    <NumberInput
-                      step="1"
-                      value={Number(jumpRunSettings.assumptions.slickFallRateFps.toFixed(0))}
-                      onValueChange={(nextValue) => setWingsuitAutoAssumptions({ slickFallRateFps: nextValue })}
-                    />
-                  </label>
+                  {!isDistanceJumpRun ? (
+                    <>
+                      <label>
+                        {t.groupCount}
+                        <NumberInput
+                          min="1"
+                          step="1"
+                          value={jumpRunSettings.assumptions.groupCount}
+                          onValueChange={(nextValue) => setWingsuitAutoAssumptions({ groupCount: Math.round(nextValue) })}
+                        />
+                      </label>
+                      <label>
+                        {t.groupSeparation} ({altUnitLabel})
+                        <NumberInput
+                          value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.groupSeparationFt))}
+                          onValueChange={(nextValue) =>
+                            setWingsuitAutoAssumptions({ groupSeparationFt: fromDisplayFeet(unitSystem, nextValue) })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.slickDeployHeight} ({altUnitLabel})
+                        <NumberInput
+                          value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickDeployHeightFt))}
+                          onValueChange={(nextValue) =>
+                            setWingsuitAutoAssumptions({ slickDeployHeightFt: fromDisplayFeet(unitSystem, nextValue) })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.slickReturnRadius} ({altUnitLabel})
+                        <NumberInput
+                          value={Math.round(toDisplayFeet(unitSystem, jumpRunSettings.assumptions.slickReturnRadiusFt))}
+                          onValueChange={(nextValue) =>
+                            setWingsuitAutoAssumptions({ slickReturnRadiusFt: fromDisplayFeet(unitSystem, nextValue) })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.slickFallRate}
+                        <NumberInput
+                          step="1"
+                          value={Number(jumpRunSettings.assumptions.slickFallRateFps.toFixed(0))}
+                          onValueChange={(nextValue) => setWingsuitAutoAssumptions({ slickFallRateFps: nextValue })}
+                        />
+                      </label>
+                    </>
+                  ) : null}
                 </div>
               </details>
             </section>
@@ -1877,15 +1959,28 @@ export default function App() {
                   <p className="metric-card">
                     {t.crosswindComponent}: {formatOptionalSpeed(autoDiagnostics?.crosswindComponentKt)}
                   </p>
-                  <p className="metric-card">
-                    {t.crosswindOffsite}: {formatOptionalDistance(autoDiagnostics?.crosswindOffsetFt)}
-                  </p>
-                  <p className="metric-card">
-                    {t.firstSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.firstSlickReturnMarginFt)}
-                  </p>
-                  <p className="metric-card">
-                    {t.lastSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.lastSlickReturnMarginFt)}
-                  </p>
+                  {autoDiagnostics?.placementMode === "distance" ? (
+                    <>
+                      <p className="metric-card">
+                        {t.normalJumpRunHeading}: {formatOptionalDegrees(autoDiagnostics.normalJumpRunHeadingDeg)}
+                      </p>
+                      <p className="metric-card">
+                        {t.distanceOffsite}: {formatOptionalDistance(autoDiagnostics.distanceOffsiteFt)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="metric-card">
+                        {t.crosswindOffsite}: {formatOptionalDistance(autoDiagnostics?.crosswindOffsetFt)}
+                      </p>
+                      <p className="metric-card">
+                        {t.firstSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.firstSlickReturnMarginFt)}
+                      </p>
+                      <p className="metric-card">
+                        {t.lastSlickReturnMargin}: {formatOptionalDistance(autoDiagnostics?.lastSlickReturnMarginFt)}
+                      </p>
+                    </>
+                  )}
                   <p className="metric-card">
                     {t.preferredDeployBearing}: {formatOptionalDegrees(autoDiagnostics?.preferredDeployBearingDeg)}
                   </p>

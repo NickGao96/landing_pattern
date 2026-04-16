@@ -44,6 +44,15 @@ const FORWARD_CANOPY_AIRSPEED_KT = 25;
 const FORWARD_CANOPY_GLIDE_RATIO = 2.5;
 const FORWARD_CANOPY_DEPLOYMENT_LOSS_FT = 300;
 const FORWARD_CANOPY_PATTERN_RESERVE_FT = 1000;
+const FORWARD_CANOPY_PREFERRED_MARGIN_FT = 750;
+const FORWARD_CORRIDOR_PREFERRED_MARGIN_FT = 1000;
+const FORWARD_DEPLOY_PREFERRED_RADIUS_FRACTION = 0.45;
+const FORWARD_DEPLOY_PREFERRED_RADIUS_MIN_FT = 2500;
+const FORWARD_DEPLOY_PREFERRED_RADIUS_MAX_FT = 4500;
+const FORWARD_DEPLOY_PREFERRED_RADIUS_BAND_FT = 750;
+const WINGSUIT_DISTANCE_DEFAULT_OFFSET_FT = 4000 * 3.280839895;
+const WINGSUIT_DISTANCE_DEFAULT_POST_TURN_FT = 750;
+const WINGSUIT_DISTANCE_FIRST_LEG_TARGET_FT = 1800;
 
 export const DEFAULT_WINGSUIT_AUTO_TURN_RATIOS: WingsuitAutoTurnRatios = {
   turn1: 0.75,
@@ -187,8 +196,11 @@ interface ResolvedJumpRunPlan {
   targetExitLocal: LocalPoint;
   jumpRunUnit: LocalPoint;
   groupSpacingFt: number;
+  placementMode: "normal" | "distance";
   headingSource: WingsuitAutoJumpRunHeadingSource;
   constrainedHeadingApplied: boolean;
+  normalJumpRunHeadingDeg: number | null;
+  distanceOffsiteFt: number | null;
   headwindComponentKt: number;
   crosswindComponentKt: number;
   firstSlickReturnMarginFt: number | null;
@@ -212,6 +224,14 @@ function computeWingLoading(exitWeightLb: number, canopyAreaSqft: number): numbe
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function positivePart(value: number): number {
+  return Math.max(0, value);
+}
+
+function square(value: number): number {
+  return value * value;
 }
 
 function computeAirspeedKt(input: Pick<PatternInput, "canopy">, wingLoading: number): number {
@@ -780,7 +800,23 @@ function createResolvedJumpRunSlot(
   };
 }
 
+function resolveJumpRunPlacementMode(mode: WingsuitAutoInput["jumpRun"]["placementMode"] | undefined): "normal" | "distance" {
+  return mode === "distance" ? "distance" : "normal";
+}
+
+function resolveDistanceOffsetFt(input: WingsuitAutoInput): number {
+  return input.jumpRun.distanceOffsetFt ?? WINGSUIT_DISTANCE_DEFAULT_OFFSET_FT;
+}
+
+function resolveDistancePostTurnFt(input: WingsuitAutoInput): number {
+  return input.jumpRun.distancePostTurnFt ?? WINGSUIT_DISTANCE_DEFAULT_POST_TURN_FT;
+}
+
 function resolveJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | null {
+  if (resolveJumpRunPlacementMode(input.jumpRun.placementMode) === "distance") {
+    return resolveDistanceJumpRunPlan(input);
+  }
+
   const assumptions = resolveJumpRunAssumptions(input.jumpRun.assumptions);
   const headingResolution = resolveJumpRunHeading(input);
   if (!headingResolution) {
@@ -850,8 +886,11 @@ function resolveJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | nul
     targetExitLocal: localPointFromGeoPoint(input.landingPoint, slots[slots.length - 1]!),
     jumpRunUnit,
     groupSpacingFt: assumptions.groupSeparationFt,
+    placementMode: "normal",
     headingSource: headingResolution.headingSource,
     constrainedHeadingApplied: headingResolution.constrainedHeadingApplied,
+    normalJumpRunHeadingDeg: resolved.headingDeg,
+    distanceOffsiteFt: null,
     headwindComponentKt,
     crosswindComponentKt,
     firstSlickReturnMarginFt:
@@ -867,6 +906,79 @@ function resolveJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | nul
       priorSlickGroupCount > 0 && slickCenterAlongMaxFt < slickCenterAlongMinFt
         ? `Jump run cannot fit ${priorSlickGroupCount} slick groups inside the ${assumptions.slickReturnRadiusFt.toFixed(0)} ft return radius.`
         : null,
+  };
+}
+
+function resolveDistanceJumpRunPlan(input: WingsuitAutoInput): ResolvedJumpRunPlan | null {
+  const assumptions = resolveJumpRunAssumptions(input.jumpRun.assumptions);
+  const headingResolution = resolveJumpRunHeading(input);
+  if (!headingResolution) {
+    return null;
+  }
+
+  const normalHeadingDeg = headingResolution.headingDeg;
+  const sideSign = input.side === "left" ? -1 : 1;
+  const distanceRunHeadingDeg = normalizeHeading(normalHeadingDeg + sideSign * 90);
+  const normalJumpRunUnit = pointToUnitVector(normalHeadingDeg);
+  const distanceRunUnit = pointToUnitVector(distanceRunHeadingDeg);
+  const distanceOffsetFt = resolveDistanceOffsetFt(input);
+  const postTurnFt = resolveDistancePostTurnFt(input);
+  const turnAnchorLocal = scaleLocalPoint(normalJumpRunUnit, distanceOffsetFt);
+  const targetExitLocal = localPointAdd(turnAnchorLocal, scaleLocalPoint(distanceRunUnit, postTurnFt));
+  const linePaddingFt = Math.max(assumptions.groupSeparationFt, postTurnFt + 750, 1500);
+  const startLocal = localPointAdd(targetExitLocal, scaleLocalPoint(distanceRunUnit, -linePaddingFt));
+  const endLocal = localPointAdd(targetExitLocal, scaleLocalPoint(distanceRunUnit, linePaddingFt));
+  const lineLengthFt = 2 * linePaddingFt;
+
+  const exitWind = getWindForAltitude(input.exitHeightFt, input.winds);
+  const deployWind = getWindForAltitude(input.deployHeightFt, input.winds) ?? exitWind;
+  const planeAirspeedVecKt = scaleVec(localPointToVec(distanceRunUnit), assumptions.planeAirspeedKt);
+  const exitWindVecKt = exitWind ? windFromToGroundVector(exitWind.speedKt, exitWind.dirFromDeg) : { east: 0, north: 0 };
+  const planeGroundSpeedKt = Math.max(45, dot(addVec(planeAirspeedVecKt, exitWindVecKt), localPointToVec(distanceRunUnit)));
+  const deployWindVecKt = deployWind ? windFromToGroundVector(deployWind.speedKt, deployWind.dirFromDeg) : { east: 0, north: 0 };
+  const leftUnit = { eastFt: -distanceRunUnit.northFt, northFt: distanceRunUnit.eastFt };
+  const headwindComponentKt = -dot(deployWindVecKt, localPointToVec(distanceRunUnit));
+  const crosswindComponentKt = dot(deployWindVecKt, localPointToVec(leftUnit));
+  const slot = createResolvedJumpRunSlot(input, targetExitLocal, 0, 1);
+  const resolved: ResolvedJumpRun = {
+    line: {
+      start: geoPointFromLocal(input.landingPoint, startLocal),
+      end: geoPointFromLocal(input.landingPoint, endLocal),
+    },
+    headingDeg: vectorToHeadingDeg(localPointToVec(distanceRunUnit)),
+    lengthFt: lineLengthFt,
+    crosswindOffsetFt: 0,
+    planeGroundSpeedKt,
+    groupSpacingFt: assumptions.groupSeparationFt,
+    groupSpacingSec: assumptions.groupSeparationFt / Math.max(knotsToFeetPerSecond(planeGroundSpeedKt), EPSILON),
+    slots: [slot],
+  };
+  const frame = buildJumpRunFrame(input.landingPoint, resolved.line);
+  if (!frame) {
+    return null;
+  }
+
+  return {
+    resolved,
+    frame,
+    targetExitLocal,
+    jumpRunUnit: distanceRunUnit,
+    groupSpacingFt: assumptions.groupSeparationFt,
+    placementMode: "distance",
+    headingSource: headingResolution.headingSource,
+    constrainedHeadingApplied: headingResolution.constrainedHeadingApplied,
+    normalJumpRunHeadingDeg: normalHeadingDeg,
+    distanceOffsiteFt: distanceOffsetFt,
+    headwindComponentKt,
+    crosswindComponentKt,
+    firstSlickReturnMarginFt: null,
+    lastSlickReturnMarginFt: null,
+    preferredSpotOffsetAlongFt: distanceOffsetFt,
+    warnings:
+      planeGroundSpeedKt <= 45 + EPSILON
+        ? ["Aircraft ground speed was clamped to 45 kt for exit-spacing stability."]
+        : [],
+    blockedReason: null,
   };
 }
 
@@ -987,15 +1099,28 @@ function buildAutoGateCandidates(
     createAutoGateCandidate(preferred[0], preferred[1], preferred[2], preferred[3]),
   ];
 
-  const threeLegRatios: Array<[number, number]> = [
-    [Math.min(0.9, preferredRatios.turn1 + 0.08), Math.min(0.55, preferredRatios.turn2 + 0.08)],
-    [Math.max(0.5, preferredRatios.turn1 - 0.1), Math.max(0.15, preferredRatios.turn2 - 0.08)],
+  const preferredDrop1 = 1 - preferredRatios.turn1;
+  const preferredDrop2 = preferredRatios.turn1 - preferredRatios.turn2;
+  const legDropFractions: Array<[number, number]> = [
+    [preferredDrop1 - 0.07, preferredDrop2 + 0.08],
+    [preferredDrop1 + 0.07, preferredDrop2 - 0.08],
+    [0.18, 0.35],
+    [0.18, 0.44],
+    [0.25, 0.44],
+    [0.25, 0.52],
+    [0.32, 0.35],
+    [0.32, 0.44],
   ];
 
-  for (const [turn1Ratio, turn2Ratio] of threeLegRatios) {
-    if (!(turn1Ratio < 1 && turn1Ratio > turn2Ratio && turn2Ratio > 0)) {
+  for (const [rawDrop1, rawDrop2] of legDropFractions) {
+    const drop1 = clamp(rawDrop1, 0.1, 0.6);
+    const drop2 = clamp(rawDrop2, 0.2, 0.7);
+    const drop3 = 1 - drop1 - drop2;
+    if (!(drop1 > 0 && drop2 > 0 && drop3 >= 0.15)) {
       continue;
     }
+    const turn1Ratio = 1 - drop1;
+    const turn2Ratio = drop3;
     candidates.push(
       createAutoGateCandidate(
         input.exitHeightFt,
@@ -1006,25 +1131,51 @@ function buildAutoGateCandidates(
     );
   }
 
-  const noDownwindTurn2Ft = input.deployHeightFt + spanFt * preferredRatios.turn2;
-  candidates.push(
-    createAutoGateCandidate(
-      input.exitHeightFt,
-      input.exitHeightFt,
-      noDownwindTurn2Ft,
-      input.deployHeightFt,
-    ),
-  );
+  const deduped = new Map<string, AutoGateCandidate>();
+  for (const candidate of candidates) {
+    const key = candidate.gatesFt.map((value) => value.toFixed(2)).join("|");
+    deduped.set(key, candidate);
+  }
+  return [...deduped.values()];
+}
 
-  const noBaseTurnFt = input.deployHeightFt + spanFt * preferredRatios.turn1;
-  candidates.push(
-    createAutoGateCandidate(
-      input.exitHeightFt,
-      noBaseTurnFt,
-      noBaseTurnFt,
-      input.deployHeightFt,
-    ),
-  );
+function buildDistanceAutoGateCandidates(
+  input: WingsuitAutoInput,
+  _preferredRatios: WingsuitAutoTurnRatios,
+): AutoGateCandidate[] {
+  const spanFt = input.exitHeightFt - input.deployHeightFt;
+  const candidates: AutoGateCandidate[] = [];
+
+  const legDropFractions: Array<[number, number]> = [
+    [0.06, 0.47],
+    [0.08, 0.46],
+    [0.1, 0.45],
+    [0.12, 0.44],
+    [0.15, 0.42],
+    [0.18, 0.4],
+    [0.22, 0.38],
+    [0.28, 0.34],
+    [0.34, 0.3],
+    [0.45, 0.25],
+    [0.55, 0.2],
+  ];
+
+  for (const [drop1, drop2] of legDropFractions) {
+    const drop3 = 1 - drop1 - drop2;
+    if (!(drop1 > 0 && drop2 > 0 && drop3 >= 0.25)) {
+      continue;
+    }
+    const turn1Ratio = 1 - drop1;
+    const turn2Ratio = drop3;
+    candidates.push(
+      createAutoGateCandidate(
+        input.exitHeightFt,
+        input.deployHeightFt + spanFt * turn1Ratio,
+        input.deployHeightFt + spanFt * turn2Ratio,
+        input.deployHeightFt,
+      ),
+    );
+  }
 
   const deduped = new Map<string, AutoGateCandidate>();
   for (const candidate of candidates) {
@@ -1058,11 +1209,22 @@ export function validateWingsuitAutoInput(input: WingsuitAutoInput): ValidationR
 
   const directionMode = input.jumpRun.directionMode ?? "auto";
   const constraintMode = input.jumpRun.constraintMode ?? "none";
+  const placementMode = resolveJumpRunPlacementMode(input.jumpRun.placementMode);
   if (directionMode === "manual" && !Number.isFinite(input.jumpRun.manualHeadingDeg)) {
     errors.push("Manual jump-run direction requires a finite heading.");
   }
   if (constraintMode === "reciprocal" && !Number.isFinite(input.jumpRun.constraintHeadingDeg)) {
     errors.push("Reciprocal jump-run constraint requires a finite runway heading.");
+  }
+  if (placementMode === "distance") {
+    const distanceOffsetFt = resolveDistanceOffsetFt(input);
+    const postTurnFt = resolveDistancePostTurnFt(input);
+    if (!Number.isFinite(distanceOffsetFt) || distanceOffsetFt <= 0) {
+      errors.push("Distance-mode offsite distance must be finite and positive.");
+    }
+    if (!Number.isFinite(postTurnFt) || postTurnFt < 0) {
+      errors.push("Distance-mode post-turn offset must be finite and nonnegative.");
+    }
   }
 
   if (!Number.isFinite(input.exitHeightFt) || !Number.isFinite(input.deployHeightFt)) {
@@ -1310,7 +1472,7 @@ function buildFirstLegHeadingCandidates(
   maxFirstLegTrackDeltaDeg: number,
 ): number[] {
   const sideSign = side === "left" ? -1 : 1;
-  const positiveDeltas = [10, 20, 30, 40, 45]
+  const positiveDeltas = [0, 10, 20, 30, 40, 45]
     .filter((delta) => delta <= maxFirstLegTrackDeltaDeg + EPSILON);
   if (maxFirstLegTrackDeltaDeg >= 0 && !positiveDeltas.some((delta) => Math.abs(delta - maxFirstLegTrackDeltaDeg) < EPSILON)) {
     positiveDeltas.push(maxFirstLegTrackDeltaDeg);
@@ -1346,6 +1508,25 @@ function buildReturnHeadingCandidates(
   }
 
   return uniqueNormalizedHeadings(headings);
+}
+
+function buildDistanceFirstLegHeadingCandidates(
+  distanceRunHeadingDeg: number,
+  side: WingsuitAutoInput["side"],
+  maxFirstLegTrackDeltaDeg: number,
+): number[] {
+  const sideSign = side === "left" ? -1 : 1;
+  const positiveDeltas = [0, 5, 10, 15, 20, 30, 40]
+    .filter((delta) => delta <= maxFirstLegTrackDeltaDeg + EPSILON);
+  return uniqueNormalizedHeadings(positiveDeltas.map((delta) => distanceRunHeadingDeg + sideSign * delta));
+}
+
+function buildDistanceReturnHeadingCandidates(
+  normalJumpRunHeadingDeg: number | null,
+  _previewLocal: LocalPoint | null,
+): number[] {
+  const returnHeadingDeg = normalizeHeading((normalJumpRunHeadingDeg ?? 0) + 180);
+  return uniqueNormalizedHeadings([-35, -25, -15, -5, 0, 5, 15, 25, 35].map((delta) => returnHeadingDeg + delta));
 }
 
 function segmentToOutput(segment: SegmentComputation): PatternOutput["segments"][number] {
@@ -1508,22 +1689,43 @@ function computeCanopyReturnMarginFt(input: WingsuitAutoInput, deployLocal: Loca
 function computeForwardShapePenalty(
   input: WingsuitAutoInput,
   jumpRunHeadingDeg: number,
-  firstLegTrackDeltaDeg: number,
-  offsetHeadingDeg: number,
-  returnHeadingDeg: number,
-  turn2Local: LocalPoint,
+  firstTrackHeadingDeg: number,
+  offsetTrackHeadingDeg: number,
+  returnTrackHeadingDeg: number,
 ): number {
   const sideSign = input.side === "left" ? -1 : 1;
-  const preferredOffsetHeadingDeg = normalizeHeading(jumpRunHeadingDeg + sideSign * 90);
-  const directReturnHeadingDeg =
-    localPointMagnitude(turn2Local) > EPSILON
-      ? vectorToHeadingDeg({ east: -turn2Local.eastFt, north: -turn2Local.northFt })
-      : normalizeHeading(jumpRunHeadingDeg + 180);
+  const firstTargetHeadingDeg = normalizeHeading(jumpRunHeadingDeg + sideSign * 15);
+  const offsetTargetHeadingDeg = normalizeHeading(jumpRunHeadingDeg + sideSign * 90);
+  const returnTargetHeadingDeg = normalizeHeading(jumpRunHeadingDeg + 180);
 
   return (
-    absoluteHeadingDeltaDeg(offsetHeadingDeg, preferredOffsetHeadingDeg) +
-    absoluteHeadingDeltaDeg(returnHeadingDeg, directReturnHeadingDeg) * 0.35 +
-    Math.abs(firstLegTrackDeltaDeg - Math.min(30, Math.max(0, input.tuning?.maxFirstLegTrackDeltaDeg ?? 30))) * 0.2
+    0.5 * square(absoluteHeadingDeltaDeg(firstTrackHeadingDeg, firstTargetHeadingDeg) / 20) +
+    1.5 * square(absoluteHeadingDeltaDeg(offsetTrackHeadingDeg, offsetTargetHeadingDeg) / 20) +
+    1.5 * square(absoluteHeadingDeltaDeg(returnTrackHeadingDeg, returnTargetHeadingDeg) / 25)
+  );
+}
+
+function computeDistanceShapePenalty(
+  input: WingsuitAutoInput,
+  distanceRunHeadingDeg: number,
+  normalJumpRunHeadingDeg: number | null,
+  firstTrackHeadingDeg: number,
+  offsetTrackHeadingDeg: number,
+  returnTrackHeadingDeg: number,
+  firstLegDistanceFt: number,
+): number {
+  const sideSign = input.side === "left" ? -1 : 1;
+  const firstTargetHeadingDeg = normalizeHeading(distanceRunHeadingDeg + sideSign * 10);
+  const returnTargetHeadingDeg = normalizeHeading((normalJumpRunHeadingDeg ?? distanceRunHeadingDeg) + 180);
+  const shortFirstLegPenalty =
+    4 * square(positivePart(firstLegDistanceFt - WINGSUIT_DISTANCE_FIRST_LEG_TARGET_FT) / 700) +
+    0.35 * square(positivePart(900 - firstLegDistanceFt) / 900);
+
+  return (
+    square(absoluteHeadingDeltaDeg(firstTrackHeadingDeg, firstTargetHeadingDeg) / 15) +
+    3 * square(absoluteHeadingDeltaDeg(offsetTrackHeadingDeg, returnTargetHeadingDeg) / 14) +
+    3 * square(absoluteHeadingDeltaDeg(returnTrackHeadingDeg, returnTargetHeadingDeg) / 14) +
+    1.6 * shortFirstLegPenalty
   );
 }
 
@@ -1532,6 +1734,7 @@ function evaluateForwardRouteCandidate(
   plan: ResolvedJumpRunPlan,
   gateCandidate: AutoGateCandidate,
   tuning: Required<WingsuitAutoTuning>,
+  forbiddenDeployBearingDeg: number | null,
   firstLegHeadingDeg: number,
   offsetHeadingDeg: number,
   returnHeadingDeg: number,
@@ -1599,6 +1802,13 @@ function evaluateForwardRouteCandidate(
   if (radiusFt < tuning.minDeployRadiusFt || radiusFt > tuning.maxDeployRadiusFt) {
     return { candidate: null, rejectionReason: "deploy-radius" };
   }
+  const bearingDeg = vectorToHeadingDeg(localPointToVec(deployLocal));
+  if (
+    forbiddenDeployBearingDeg != null &&
+    absoluteHeadingDeltaDeg(bearingDeg, forbiddenDeployBearingDeg) <= tuning.deployBearingWindowHalfDeg
+  ) {
+    return { candidate: null, rejectionReason: "wind-no-deploy-zone" };
+  }
 
   const canopyReturnMarginFt = computeCanopyReturnMarginFt(input, deployLocal);
   if (canopyReturnMarginFt < 0) {
@@ -1616,14 +1826,21 @@ function evaluateForwardRouteCandidate(
     createAutoWaypoint("deploy", deployGeo, gateCandidate.gatesFt[3]),
   ];
   const corridorMarginFt = Math.min(...pointMargins, ...routeMargins.map((margin) => margin.marginFt));
-  const bearingDeg = vectorToHeadingDeg(localPointToVec(deployLocal));
   const shapePenalty = computeForwardShapePenalty(
     input,
     jumpRunHeadingDeg,
-    Math.abs(firstLegTrackDeltaDeg),
-    offsetHeadingDeg,
-    returnHeadingDeg,
-    turn2Local,
+    simulation.legs[0]!.segment.trackHeadingDeg,
+    simulation.legs[1]!.segment.trackHeadingDeg,
+    simulation.legs[2]!.segment.trackHeadingDeg,
+  );
+  const distanceShapePenalty = computeDistanceShapePenalty(
+    input,
+    jumpRunHeadingDeg,
+    plan.normalJumpRunHeadingDeg,
+    simulation.legs[0]!.segment.trackHeadingDeg,
+    simulation.legs[1]!.segment.trackHeadingDeg,
+    simulation.legs[2]!.segment.trackHeadingDeg,
+    simulation.legs[0]!.segment.distanceFt,
   );
 
   return {
@@ -1647,35 +1864,64 @@ function evaluateForwardRouteCandidate(
       firstLegTrackDeltaDeg: Math.abs(firstLegTrackDeltaDeg),
       exitAlongTargetErrorFt: 0,
       canopyReturnMarginFt,
-      shapePenalty,
+      shapePenalty: plan.placementMode === "distance" ? distanceShapePenalty : shapePenalty,
     },
     rejectionReason: null,
   };
 }
 
 function compareForwardCandidates(a: CandidateEvaluation, b: CandidateEvaluation): number {
-  if (Math.abs(a.canopyReturnMarginFt - b.canopyReturnMarginFt) > 100) {
-    return b.canopyReturnMarginFt - a.canopyReturnMarginFt;
-  }
-  if (Math.abs(a.corridorMarginFt - b.corridorMarginFt) > 50) {
-    return b.corridorMarginFt - a.corridorMarginFt;
-  }
-  if (Math.abs(a.shapePenalty - b.shapePenalty) > EPSILON) {
-    return a.shapePenalty - b.shapePenalty;
-  }
-  if (Math.abs(a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg) > EPSILON) {
-    return a.firstLegTrackDeltaDeg - b.firstLegTrackDeltaDeg;
-  }
-  return a.radiusFt - b.radiusFt;
+  return computeForwardCandidateScore(a) - computeForwardCandidateScore(b);
+}
+
+function computeForwardCandidateScore(candidate: CandidateEvaluation): number {
+  const canopyShortfallFt = positivePart(FORWARD_CANOPY_PREFERRED_MARGIN_FT - candidate.canopyReturnMarginFt);
+  const corridorShortfallFt = positivePart(FORWARD_CORRIDOR_PREFERRED_MARGIN_FT - candidate.corridorMarginFt);
+  const safetyPenalty =
+    square(canopyShortfallFt / 500) +
+    square(corridorShortfallFt / 500);
+  const preferredRadiusFt = clamp(
+    (candidate.radiusFt + candidate.deployRadiusMarginFt) * FORWARD_DEPLOY_PREFERRED_RADIUS_FRACTION,
+    FORWARD_DEPLOY_PREFERRED_RADIUS_MIN_FT,
+    FORWARD_DEPLOY_PREFERRED_RADIUS_MAX_FT,
+  );
+  const radiusShortfallFt = positivePart(
+    preferredRadiusFt - FORWARD_DEPLOY_PREFERRED_RADIUS_BAND_FT - candidate.radiusFt,
+  );
+  const radiusExcessFt = positivePart(
+    candidate.radiusFt - preferredRadiusFt - FORWARD_DEPLOY_PREFERRED_RADIUS_BAND_FT,
+  );
+  const radiusPenalty =
+    square(radiusShortfallFt / 1000) +
+    0.25 * square(radiusExcessFt / 1000);
+  const saturatedSafetyReward =
+    0.01 * Math.min(candidate.canopyReturnMarginFt, 1000) +
+    0.01 * Math.min(candidate.corridorMarginFt, 1000);
+
+  return (
+    1000 * safetyPenalty +
+    50 * candidate.shapePenalty +
+    40 * radiusPenalty -
+    saturatedSafetyReward
+  );
 }
 
 function addCandidateToBands(
   bandsByBearing: Map<number, RadiusBand>,
   candidate: CandidateEvaluation,
   bearingStepDeg: number,
+  forbiddenDeployBearingDeg: number | null,
+  forbiddenDeployBearingHalfWidthDeg: number,
 ): void {
   const safeStepDeg = Math.max(1, bearingStepDeg);
-  const key = Number(normalizeHeading(Math.round(candidate.bearingDeg / safeStepDeg) * safeStepDeg).toFixed(6));
+  const roundedKey = Number(
+    normalizeHeading(Math.round(candidate.bearingDeg / safeStepDeg) * safeStepDeg).toFixed(6),
+  );
+  const key =
+    forbiddenDeployBearingDeg != null &&
+    absoluteHeadingDeltaDeg(roundedKey, forbiddenDeployBearingDeg) <= forbiddenDeployBearingHalfWidthDeg
+      ? normalizeHeading(candidate.bearingDeg)
+      : roundedKey;
   const existing = bandsByBearing.get(key);
   if (!existing) {
     bandsByBearing.set(key, {
@@ -1720,14 +1966,25 @@ function emptyAutoOutput(
 export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput {
   const validation = validateWingsuitAutoInput(input);
   const turnRatios = resolveTurnRatios(input.turnRatios);
-  const tuning = resolveWingsuitAutoTuning(input.tuning);
+  const placementMode = resolveJumpRunPlacementMode(input.jumpRun.placementMode);
+  const baseTuning = resolveWingsuitAutoTuning(input.tuning);
+  const tuning =
+    placementMode === "distance"
+      ? {
+          ...baseTuning,
+          maxDeployRadiusFt: Math.max(baseTuning.maxDeployRadiusFt, resolveDistanceOffsetFt(input)),
+        }
+      : baseTuning;
   const landingPoint = createAutoWaypoint("landing", input.landingPoint, 0);
   const turnHeightsFt = deriveTurnHeightsFt(input, turnRatios);
   const gateCandidates = buildAutoGateCandidates(input, turnRatios);
   const baseDiagnostics: WingsuitAutoOutput["diagnostics"] = {
     headingSource: null,
+    placementMode,
     constrainedHeadingApplied: false,
     resolvedHeadingDeg: null,
+    normalJumpRunHeadingDeg: null,
+    distanceOffsiteFt: null,
     headwindComponentKt: null,
     crosswindComponentKt: null,
     crosswindOffsetFt: null,
@@ -1793,20 +2050,25 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
 
   const lowestWindLayer = [...input.winds].sort((a, b) => a.altitudeFt - b.altitudeFt)[0];
   const preferredBearingDeg = lowestWindLayer ? normalizeHeading(lowestWindLayer.dirFromDeg) : null;
+  const forbiddenDeployBearingDeg =
+    preferredBearingDeg == null ? null : normalizeHeading(preferredBearingDeg + 180);
   const downwindDeployForbiddenZonePolygon =
     preferredBearingDeg == null
       ? []
       : buildHalfDiskPolygon(
           input.landingPoint,
-          normalizeHeading(preferredBearingDeg + 180),
+          forbiddenDeployBearingDeg ?? 0,
           downwindShadeRadiusFt,
         );
 
   const setupDiagnostics: WingsuitAutoOutput["diagnostics"] = {
     ...baseDiagnostics,
     headingSource: resolvedPlan.headingSource,
+    placementMode: resolvedPlan.placementMode,
     constrainedHeadingApplied: resolvedPlan.constrainedHeadingApplied,
     resolvedHeadingDeg: resolvedPlan.resolved.headingDeg,
+    normalJumpRunHeadingDeg: resolvedPlan.normalJumpRunHeadingDeg,
+    distanceOffsiteFt: resolvedPlan.distanceOffsiteFt,
     headwindComponentKt: resolvedPlan.headwindComponentKt,
     crosswindComponentKt: resolvedPlan.crosswindComponentKt,
     crosswindOffsetFt: resolvedPlan.resolved.crosswindOffsetFt,
@@ -1854,15 +2116,28 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
     }
     rejectionCounts.set(reason, (rejectionCounts.get(reason) ?? 0) + 1);
   };
-  const forwardGateCandidates = gateCandidates.filter(isStrictThreeLegGate);
+  const forwardGateCandidates = (placementMode === "distance"
+    ? buildDistanceAutoGateCandidates(input, turnRatios)
+    : gateCandidates
+  ).filter(isStrictThreeLegGate);
 
   for (const gateCandidate of forwardGateCandidates) {
-    const firstLegHeadings = buildFirstLegHeadingCandidates(
-      resolvedPlan.resolved.headingDeg,
-      input.side,
-      tuning.maxFirstLegTrackDeltaDeg,
-    );
-    const offsetHeadings = buildOffsetHeadingCandidates(resolvedPlan.resolved.headingDeg, input.side);
+    const firstLegHeadings =
+      placementMode === "distance"
+        ? buildDistanceFirstLegHeadingCandidates(
+            resolvedPlan.resolved.headingDeg,
+            input.side,
+            tuning.maxFirstLegTrackDeltaDeg,
+          )
+        : buildFirstLegHeadingCandidates(
+            resolvedPlan.resolved.headingDeg,
+            input.side,
+            tuning.maxFirstLegTrackDeltaDeg,
+          );
+    const offsetHeadings =
+      placementMode === "distance"
+        ? buildDistanceReturnHeadingCandidates(resolvedPlan.normalJumpRunHeadingDeg, null)
+        : buildOffsetHeadingCandidates(resolvedPlan.resolved.headingDeg, input.side);
 
     for (const firstLegHeadingDeg of firstLegHeadings) {
       for (const offsetHeadingDeg of offsetHeadings) {
@@ -1873,11 +2148,14 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
           firstLegHeadingDeg,
           offsetHeadingDeg,
         );
-        const returnHeadings = buildReturnHeadingCandidates(
-          resolvedPlan.resolved.headingDeg,
-          input.side,
-          turn2Preview,
-        );
+        const returnHeadings =
+          placementMode === "distance"
+            ? buildDistanceReturnHeadingCandidates(resolvedPlan.normalJumpRunHeadingDeg, turn2Preview)
+            : buildReturnHeadingCandidates(
+                resolvedPlan.resolved.headingDeg,
+                input.side,
+                turn2Preview,
+              );
 
         for (const returnHeadingDeg of returnHeadings) {
           const result = evaluateForwardRouteCandidate(
@@ -1885,6 +2163,7 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
             resolvedPlan,
             gateCandidate,
             tuning,
+            forbiddenDeployBearingDeg,
             firstLegHeadingDeg,
             offsetHeadingDeg,
             returnHeadingDeg,
@@ -1894,7 +2173,13 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
             continue;
           }
           validCandidates.push(result.candidate);
-          addCandidateToBands(bandsByBearing, result.candidate, tuning.deployBearingStepDeg);
+          addCandidateToBands(
+            bandsByBearing,
+            result.candidate,
+            tuning.deployBearingStepDeg,
+            forbiddenDeployBearingDeg,
+            tuning.deployBearingWindowHalfDeg,
+          );
         }
       }
     }
@@ -1914,6 +2199,8 @@ export function solveWingsuitAuto(input: WingsuitAutoInput): WingsuitAutoOutput 
       failureReason = "No deploy point survives jump-run corridor exclusion.";
     } else if (dominantReason === "deploy-radius") {
       failureReason = "No forward route reaches deployment inside the configured radius limits.";
+    } else if (dominantReason === "wind-no-deploy-zone") {
+      failureReason = "No deploy point survives the wind no-deploy zone.";
     } else if (dominantReason === "canopy-return") {
       failureReason = "No forward route leaves enough canopy-return margin from deployment.";
     } else if (dominantReason === "nonpositive-ground-speed") {

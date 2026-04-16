@@ -8,6 +8,7 @@ import type {
   WingsuitAutoJumpRunAssumptions,
   WingsuitAutoJumpRunConstraintMode,
   WingsuitAutoJumpRunDirectionMode,
+  WingsuitAutoJumpRunPlacementMode,
   WingsuitProfile,
 } from "@landing/ui-types";
 import { canopyPresets } from "@landing/data";
@@ -49,10 +50,12 @@ export interface WingsuitSettings {
 
 export interface WingsuitAutoSettings {
   planningMode: WingsuitPlanningMode;
+  placementMode: WingsuitAutoJumpRunPlacementMode;
   directionMode: WingsuitAutoJumpRunDirectionMode;
   manualHeadingDeg: number;
   constraintMode: WingsuitAutoJumpRunConstraintMode;
   constraintHeadingDeg: number;
+  distanceOffsetFt: number;
   assumptions: Required<WingsuitAutoJumpRunAssumptions>;
 }
 
@@ -92,10 +95,12 @@ interface AppStore {
   setWingsuitWindLayers: (layers: WindLayer[]) => void;
   updateWingsuitWindLayer: (layerIndex: number, patch: Partial<WindLayer>) => void;
   setWingsuitPlanningMode: (mode: WingsuitPlanningMode) => void;
+  setWingsuitAutoPlacementMode: (mode: WingsuitAutoJumpRunPlacementMode) => void;
   setWingsuitAutoDirectionMode: (mode: WingsuitAutoJumpRunDirectionMode) => void;
   setWingsuitAutoManualHeading: (headingDeg: number) => void;
   setWingsuitAutoConstraintMode: (mode: WingsuitAutoJumpRunConstraintMode) => void;
   setWingsuitAutoConstraintHeading: (headingDeg: number) => void;
+  setWingsuitAutoDistanceOffset: (distanceOffsetFt: number) => void;
   setWingsuitAutoAssumptions: (patch: Partial<WingsuitAutoJumpRunAssumptions>) => void;
   setUnitSystem: (system: UnitSystem) => void;
   setLanguage: (language: Language) => void;
@@ -106,6 +111,7 @@ interface AppStore {
 const defaultLat = 37.4419;
 const defaultLng = -122.143;
 const feetPerDegLat = 364000;
+const defaultWingsuitDistanceOffsetFt = 4000 * 3.280839895;
 
 const defaultPreset: CanopyProfile = canopyPresets[0] ?? {
   manufacturer: "Performance Designs",
@@ -222,6 +228,7 @@ function normalizePersistedAutoSettings(
 
   return {
     planningMode: value.planningMode === "auto" ? "auto" : "manual",
+    placementMode: value.placementMode === "distance" ? "distance" : "normal",
     directionMode:
       value.directionMode === "manual" || value.directionMode === "auto"
         ? value.directionMode
@@ -233,16 +240,22 @@ function normalizePersistedAutoSettings(
     constraintMode: value.constraintMode === "reciprocal" ? "reciprocal" : "none",
     constraintHeadingDeg:
       typeof value.constraintHeadingDeg === "number" ? normalizeHeading(value.constraintHeadingDeg) : 0,
+    distanceOffsetFt:
+      typeof value.distanceOffsetFt === "number" && Number.isFinite(value.distanceOffsetFt) && value.distanceOffsetFt > 0
+        ? value.distanceOffsetFt
+        : defaultWingsuitDistanceOffsetFt,
     assumptions: normalizePersistedAssumptions(value.assumptions),
   };
 }
 
 const defaultWingsuitAutoSettings: WingsuitAutoSettings = {
   planningMode: "manual",
+  placementMode: "normal",
   directionMode: "auto",
   manualHeadingDeg: 0,
   constraintMode: "none",
   constraintHeadingDeg: 0,
+  distanceOffsetFt: defaultWingsuitDistanceOffsetFt,
   assumptions: defaultWingsuitAutoAssumptions,
 };
 
@@ -361,6 +374,13 @@ export const useAppStore = create<AppStore>()(
             planningMode,
           },
         })),
+      setWingsuitAutoPlacementMode: (placementMode) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            placementMode,
+          },
+        })),
       setWingsuitAutoDirectionMode: (directionMode) =>
         set((state) => ({
           wingsuitAutoSettings: {
@@ -387,6 +407,16 @@ export const useAppStore = create<AppStore>()(
           wingsuitAutoSettings: {
             ...state.wingsuitAutoSettings,
             constraintHeadingDeg: normalizeHeading(constraintHeadingDeg),
+          },
+        })),
+      setWingsuitAutoDistanceOffset: (distanceOffsetFt) =>
+        set((state) => ({
+          wingsuitAutoSettings: {
+            ...state.wingsuitAutoSettings,
+            distanceOffsetFt:
+              Number.isFinite(distanceOffsetFt) && distanceOffsetFt > 0
+                ? distanceOffsetFt
+                : defaultWingsuitDistanceOffsetFt,
           },
         })),
       setWingsuitAutoAssumptions: (patch) =>

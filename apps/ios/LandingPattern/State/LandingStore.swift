@@ -12,6 +12,7 @@ enum WingsuitPlanningMode: String, Codable, CaseIterable {
 private let defaultCoordinate = CLLocationCoordinate2D(latitude: 37.4419, longitude: -122.143)
 private let autoJumpRunHalfLengthFt: Double = 6000
 private let autoWindStepFt: Double = 250
+private let iosWingsuitAutoModeEnabled = false
 
 @MainActor
 final class LandingStore: ObservableObject {
@@ -125,7 +126,11 @@ final class LandingStore: ObservableObject {
     }
 
     var isWingsuitAutoMode: Bool {
-        mode == .wingsuit && wingsuitPlanningMode == .auto
+        iosWingsuitAutoModeEnabled && mode == .wingsuit && wingsuitPlanningMode == .auto
+    }
+
+    var isWingsuitAutoAvailable: Bool {
+        iosWingsuitAutoModeEnabled
     }
 
     var activeGatesFt: [Double] {
@@ -482,7 +487,7 @@ final class LandingStore: ObservableObject {
                 gatesFt: wingsuitGatesFt,
                 wingsuit: wingsuit,
                 windLayers: wingsuitWindLayers,
-                planningMode: wingsuitPlanningMode,
+                planningMode: iosWingsuitAutoModeEnabled ? wingsuitPlanningMode : .manual,
                 autoSettings: WingsuitAutoSettingsSnapshot(
                     landingPoint: geoPoint(from: wingsuitAutoLandingPoint),
                     jumpRun: JumpRunLine(
@@ -525,7 +530,7 @@ final class LandingStore: ObservableObject {
             wingsuitGatesFt = wingsuitSettings.gatesFt
             wingsuit = normalizedWingsuitProfile(wingsuitSettings.wingsuit)
             wingsuitWindLayers = wingsuitSettings.windLayers
-            wingsuitPlanningMode = wingsuitSettings.planningMode ?? .manual
+            wingsuitPlanningMode = iosWingsuitAutoModeEnabled ? (wingsuitSettings.planningMode ?? .manual) : .manual
             if let autoSettings = wingsuitSettings.autoSettings {
                 wingsuitAutoLandingPoint = coordinate(from: autoSettings.landingPoint)
                 wingsuitAutoJumpRunStart = coordinate(from: autoSettings.jumpRun.start)
