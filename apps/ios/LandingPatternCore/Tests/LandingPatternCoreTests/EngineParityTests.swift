@@ -181,8 +181,8 @@ final class EngineParityTests: XCTestCase {
                 context: "\(fixture.name) exit error"
             )
             assertOptionalEqual(
-                output.diagnostics.deployEnvelopeMarginFt,
-                fixture.output.diagnostics.deployEnvelopeMarginFt,
+                output.diagnostics.deployRadiusMarginFt,
+                fixture.output.diagnostics.deployRadiusMarginFt,
                 accuracy: 1e-9,
                 context: "\(fixture.name) envelope margin"
             )

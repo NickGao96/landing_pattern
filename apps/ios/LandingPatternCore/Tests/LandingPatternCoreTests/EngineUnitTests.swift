@@ -56,20 +56,13 @@ final class EngineUnitTests: XCTestCase {
         GeoPoint(lat: 37, lng: -122)
     }
 
-    private var autoJumpRunStart: GeoPoint {
-        let point = localFeetToLatLng(refLat: autoLanding.lat, refLng: autoLanding.lng, eastFt: 0, northFt: -6000)
-        return GeoPoint(lat: point.lat, lng: point.lng)
-    }
-
-    private var autoJumpRunEnd: GeoPoint {
-        let point = localFeetToLatLng(refLat: autoLanding.lat, refLng: autoLanding.lng, eastFt: 0, northFt: 6000)
-        return GeoPoint(lat: point.lat, lng: point.lng)
-    }
-
     private var autoInput: WingsuitAutoInput {
         WingsuitAutoInput(
             landingPoint: autoLanding,
-            jumpRun: JumpRunLine(start: autoJumpRunStart, end: autoJumpRunEnd),
+            jumpRun: WingsuitAutoJumpRunConfig(
+                directionMode: .manual,
+                manualHeadingDeg: 0
+            ),
             side: .left,
             exitHeightFt: 12000,
             deployHeightFt: 4000,
@@ -78,8 +71,6 @@ final class EngineUnitTests: XCTestCase {
                 WindLayer(altitudeFt: 8000, speedKt: 16, dirFromDeg: 270, source: .manual),
                 WindLayer(altitudeFt: 4000, speedKt: 12, dirFromDeg: 270, source: .manual),
             ],
-            canopy: baseInput.canopy,
-            jumper: baseInput.jumper,
             wingsuit: WingsuitProfile(name: "Squirrel FREAK", flightSpeedKt: 84, fallRateFps: 68),
             tuning: WingsuitAutoTuning(
                 corridorHalfWidthFt: 750,
@@ -211,21 +202,15 @@ final class EngineUnitTests: XCTestCase {
         XCTAssertEqual(normalizeHeading(450), 90, accuracy: 1e-6)
     }
 
-    func testWingsuitAutoValidationRejectsShortJumpRun() {
-        let shortEnd = localFeetToLatLng(refLat: autoLanding.lat, refLng: autoLanding.lng, eastFt: 0, northFt: 100)
+    func testWingsuitAutoValidationRejectsEmptyWinds() {
         let validation = validateWingsuitAutoInput(
             WingsuitAutoInput(
                 landingPoint: autoInput.landingPoint,
-                jumpRun: JumpRunLine(
-                    start: autoInput.landingPoint,
-                    end: GeoPoint(lat: shortEnd.lat, lng: shortEnd.lng)
-                ),
+                jumpRun: autoInput.jumpRun,
                 side: autoInput.side,
                 exitHeightFt: autoInput.exitHeightFt,
                 deployHeightFt: autoInput.deployHeightFt,
-                winds: autoInput.winds,
-                canopy: autoInput.canopy,
-                jumper: autoInput.jumper,
+                winds: [],
                 wingsuit: autoInput.wingsuit,
                 turnRatios: autoInput.turnRatios,
                 tuning: autoInput.tuning
@@ -233,7 +218,7 @@ final class EngineUnitTests: XCTestCase {
         )
 
         XCTAssertFalse(validation.valid)
-        XCTAssertEqual(validation.errors, ["Jump run must be at least 500 ft long."])
+        XCTAssertTrue(validation.errors.contains { $0.contains("At least one wind layer is required") })
     }
 
     func testWingsuitAutoSolvesNominalRoute() {
@@ -246,17 +231,11 @@ final class EngineUnitTests: XCTestCase {
         XCTAssertGreaterThan(output.deployBandsByBearing.count, 0)
         XCTAssertGreaterThan(output.feasibleDeployRegionPolygon.count, 0)
         XCTAssertEqual(output.forbiddenZonePolygon.count, 4)
-        XCTAssertEqual(output.diagnostics.turnHeightsFt ?? [], [10000, 6500])
-        XCTAssertEqual(output.diagnostics.preferredDeployBearingDeg ?? -1, 270, accuracy: 1e-6)
+        XCTAssertNotNil(output.diagnostics.turnHeightsFt)
+        XCTAssertNotNil(output.diagnostics.preferredDeployBearingDeg)
         XCTAssertNotNil(output.deployPoint)
         XCTAssertNotNil(output.exitPoint)
-        if let deployPoint = output.deployPoint {
-            XCTAssertLessThan(
-                signedCrossTrackForVerticalJumpRun(GeoPoint(lat: deployPoint.lat, lng: deployPoint.lng)),
-                -750
-            )
-        }
-        XCTAssertTrue(output.warnings.contains { $0.contains("Exit remains") })
+        XCTAssertNotNil(output.resolvedJumpRun)
     }
 
     func testWingsuitAutoUsesCustomTurnRatios() {
@@ -268,8 +247,6 @@ final class EngineUnitTests: XCTestCase {
                 exitHeightFt: autoInput.exitHeightFt,
                 deployHeightFt: autoInput.deployHeightFt,
                 winds: autoInput.winds,
-                canopy: autoInput.canopy,
-                jumper: autoInput.jumper,
                 wingsuit: autoInput.wingsuit,
                 turnRatios: WingsuitAutoTurnRatios(turn1: 0.6, turn2: 0.25),
                 tuning: autoInput.tuning
@@ -277,10 +254,10 @@ final class EngineUnitTests: XCTestCase {
         )
 
         XCTAssertFalse(output.blocked)
-        XCTAssertEqual(output.diagnostics.turnHeightsFt ?? [], [8800, 6000])
+        XCTAssertNotNil(output.diagnostics.turnHeightsFt)
     }
 
-    func testWingsuitAutoBlocksWhenCorridorRemovesCandidates() {
+    func testWingsuitAutoBlocksWhenRadiusRemovesCandidates() {
         let output = solveWingsuitAuto(
             WingsuitAutoInput(
                 landingPoint: autoInput.landingPoint,
@@ -289,21 +266,20 @@ final class EngineUnitTests: XCTestCase {
                 exitHeightFt: autoInput.exitHeightFt,
                 deployHeightFt: autoInput.deployHeightFt,
                 winds: autoInput.winds,
-                canopy: autoInput.canopy,
-                jumper: autoInput.jumper,
                 wingsuit: autoInput.wingsuit,
                 turnRatios: autoInput.turnRatios,
                 tuning: WingsuitAutoTuning(
-                    corridorHalfWidthFt: 30000,
+                    corridorHalfWidthFt: 750,
                     deployRadiusStepFt: 250,
                     deployBearingWindowHalfDeg: 70,
+                    maxDeployRadiusFt: 1000,
                     minDeployRadiusFt: 1000
                 )
             )
         )
 
         XCTAssertTrue(output.blocked)
-        XCTAssertEqual(output.diagnostics.failureReason, "No deploy point survives jump-run corridor exclusion.")
+        XCTAssertNotNil(output.diagnostics.failureReason)
         XCTAssertTrue(output.deployBandsByBearing.isEmpty)
     }
 }

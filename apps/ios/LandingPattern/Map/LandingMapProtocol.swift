@@ -14,8 +14,6 @@ protocol LandingMapViewProtocol: View {
         waypoints: [PatternWaypoint],
         autoOutput: WingsuitAutoOutput?,
         landingPoint: CLLocationCoordinate2D,
-        jumpRunStart: CLLocationCoordinate2D,
-        jumpRunEnd: CLLocationCoordinate2D,
         blocked: Bool,
         hasWarnings: Bool,
         landingHeadingDeg: Double,
@@ -23,9 +21,7 @@ protocol LandingMapViewProtocol: View {
         windLayers: [WindLayer],
         onTouchdownChange: @escaping (CLLocationCoordinate2D) -> Void,
         onHeadingChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onLandingPointChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onJumpRunStartChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onJumpRunEndChange: @escaping (CLLocationCoordinate2D) -> Void
+        onLandingPointChange: @escaping (CLLocationCoordinate2D) -> Void
     )
 }
 

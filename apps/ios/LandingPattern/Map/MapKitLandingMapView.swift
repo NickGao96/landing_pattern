@@ -10,8 +10,6 @@ struct MapKitLandingMapView: UIViewRepresentable, LandingMapViewProtocol {
     let waypoints: [PatternWaypoint]
     let autoOutput: WingsuitAutoOutput?
     let landingPoint: CLLocationCoordinate2D
-    let jumpRunStart: CLLocationCoordinate2D
-    let jumpRunEnd: CLLocationCoordinate2D
     let blocked: Bool
     let hasWarnings: Bool
     let landingHeadingDeg: Double
@@ -20,8 +18,6 @@ struct MapKitLandingMapView: UIViewRepresentable, LandingMapViewProtocol {
     let onTouchdownChange: (CLLocationCoordinate2D) -> Void
     let onHeadingChange: (CLLocationCoordinate2D) -> Void
     let onLandingPointChange: (CLLocationCoordinate2D) -> Void
-    let onJumpRunStartChange: (CLLocationCoordinate2D) -> Void
-    let onJumpRunEndChange: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -57,6 +53,8 @@ extension MapKitLandingMapView {
             case final
             case headingGuide
             case jumpRun
+            case landingNoDeployZone
+            case downwindDeployForbiddenZone
             case forbiddenZone
             case feasibleDeployRegion
         }
@@ -183,6 +181,8 @@ extension MapKitLandingMapView {
                 routeCoordinates: coordinates(from: finiteWaypoints),
                 headingGuide: (parent.touchdown, headingDeg),
                 jumpRun: nil,
+                landingNoDeployPolygon: [],
+                downwindDeployForbiddenPolygon: [],
                 forbiddenPolygon: [],
                 feasiblePolygon: []
             )
@@ -193,37 +193,55 @@ extension MapKitLandingMapView {
         }
 
         private func syncAuto(with parent: MapKitLandingMapView, in map: MKMapView) {
-            guard isFiniteCoordinate(parent.landingPoint),
-                  isFiniteCoordinate(parent.jumpRunStart),
-                  isFiniteCoordinate(parent.jumpRunEnd) else {
+            guard isFiniteCoordinate(parent.landingPoint) else {
                 return
             }
 
             removeManualAnnotations(from: map)
+            removeJumpRunHandleAnnotations(from: map)
 
             upsertLandingPointAnnotation(on: map, coordinate: parent.landingPoint)
-            upsertJumpRunHandleAnnotations(on: map, start: parent.jumpRunStart, end: parent.jumpRunEnd)
+
+            // Jump run from resolved output
+            let resolvedJumpRun = parent.autoOutput?.resolvedJumpRun
+            let jumpRunLine: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?
+            if let jr = resolvedJumpRun {
+                let s = CLLocationCoordinate2D(latitude: jr.line.start.lat, longitude: jr.line.start.lng)
+                let e = CLLocationCoordinate2D(latitude: jr.line.end.lat, longitude: jr.line.end.lng)
+                jumpRunLine = isFiniteCoordinate(s) && isFiniteCoordinate(e) ? (s, e) : nil
+            } else {
+                jumpRunLine = nil
+            }
 
             let routeWaypoints = sanitizedAutoWaypoints(parent.autoOutput?.routeWaypoints ?? [])
             updateRoutePointAnnotations(on: map, autoWaypoints: routeWaypoints)
             updateArrowAnnotations(on: map, coordinates: coordinates(from: routeWaypoints))
 
             let forbiddenPolygon = polygonCoordinates(from: parent.autoOutput?.forbiddenZonePolygon ?? [])
+            let landingNoDeployPolygon = polygonCoordinates(from: parent.autoOutput?.landingNoDeployZonePolygon ?? [])
+            let downwindDeployForbiddenPolygon = polygonCoordinates(from: parent.autoOutput?.downwindDeployForbiddenZonePolygon ?? [])
             let feasiblePolygon = polygonCoordinates(from: parent.autoOutput?.feasibleDeployRegionPolygon ?? [])
 
             updateOverlays(
                 on: map,
                 routeCoordinates: coordinates(from: routeWaypoints),
                 headingGuide: nil,
-                jumpRun: (parent.jumpRunStart, parent.jumpRunEnd),
+                jumpRun: jumpRunLine,
+                landingNoDeployPolygon: landingNoDeployPolygon,
+                downwindDeployForbiddenPolygon: downwindDeployForbiddenPolygon,
                 forbiddenPolygon: forbiddenPolygon,
                 feasiblePolygon: feasiblePolygon
             )
 
-            let fitCoordinates = [parent.landingPoint, parent.jumpRunStart, parent.jumpRunEnd] +
+            var fitCoordinates = [parent.landingPoint] +
                 coordinates(from: routeWaypoints) +
+                landingNoDeployPolygon +
+                downwindDeployForbiddenPolygon +
                 forbiddenPolygon +
                 feasiblePolygon
+            if let jr = jumpRunLine {
+                fitCoordinates.append(contentsOf: [jr.start, jr.end])
+            }
             fitMap(on: map, anchor: parent.landingPoint, coordinates: fitCoordinates)
         }
 
@@ -334,6 +352,10 @@ extension MapKitLandingMapView {
                 map.removeAnnotation(landingPointAnnotation)
                 self.landingPointAnnotation = nil
             }
+            removeJumpRunHandleAnnotations(from: map)
+        }
+
+        private func removeJumpRunHandleAnnotations(from map: MKMapView) {
             if let jumpRunStartAnnotation {
                 map.removeAnnotation(jumpRunStartAnnotation)
                 self.jumpRunStartAnnotation = nil
@@ -463,6 +485,8 @@ extension MapKitLandingMapView {
             routeCoordinates: [CLLocationCoordinate2D],
             headingGuide: (touchdown: CLLocationCoordinate2D, headingDeg: Double)?,
             jumpRun: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?,
+            landingNoDeployPolygon: [CLLocationCoordinate2D],
+            downwindDeployForbiddenPolygon: [CLLocationCoordinate2D],
             forbiddenPolygon: [CLLocationCoordinate2D],
             feasiblePolygon: [CLLocationCoordinate2D]
         ) {
@@ -477,6 +501,20 @@ extension MapKitLandingMapView {
                 let polygon = MKPolygon(coordinates: &polygonCoordinates, count: polygonCoordinates.count)
                 activeOverlays.append(polygon)
                 overlayRoles[ObjectIdentifier(polygon)] = .feasibleDeployRegion
+            }
+
+            if downwindDeployForbiddenPolygon.count >= 3 {
+                var polygonCoordinates = downwindDeployForbiddenPolygon
+                let polygon = MKPolygon(coordinates: &polygonCoordinates, count: polygonCoordinates.count)
+                activeOverlays.append(polygon)
+                overlayRoles[ObjectIdentifier(polygon)] = .downwindDeployForbiddenZone
+            }
+
+            if landingNoDeployPolygon.count >= 3 {
+                var polygonCoordinates = landingNoDeployPolygon
+                let polygon = MKPolygon(coordinates: &polygonCoordinates, count: polygonCoordinates.count)
+                activeOverlays.append(polygon)
+                overlayRoles[ObjectIdentifier(polygon)] = .landingNoDeployZone
             }
 
             if forbiddenPolygon.count >= 3 {
@@ -632,6 +670,14 @@ extension MapKitLandingMapView {
                 let renderer = MKPolygonRenderer(polygon: polygon)
                 let role = overlayRoles[ObjectIdentifier(polygon)] ?? .forbiddenZone
                 switch role {
+                case .landingNoDeployZone:
+                    renderer.fillColor = UIColor.systemRed.withAlphaComponent(0.12)
+                    renderer.strokeColor = UIColor.systemRed.withAlphaComponent(0.35)
+                    renderer.lineWidth = 1
+                case .downwindDeployForbiddenZone:
+                    renderer.fillColor = UIColor.systemOrange.withAlphaComponent(0.12)
+                    renderer.strokeColor = UIColor.systemOrange.withAlphaComponent(0.35)
+                    renderer.lineWidth = 1
                 case .forbiddenZone:
                     renderer.fillColor = UIColor.systemRed.withAlphaComponent(0.16)
                     renderer.strokeColor = UIColor.systemRed.withAlphaComponent(0.45)
@@ -677,7 +723,7 @@ extension MapKitLandingMapView {
                 renderer.strokeColor = UIColor.systemIndigo.withAlphaComponent(0.9)
                 renderer.lineWidth = 3
                 renderer.lineDashPattern = [8, 5]
-            case .forbiddenZone, .feasibleDeployRegion:
+            case .forbiddenZone, .feasibleDeployRegion, .landingNoDeployZone, .downwindDeployForbiddenZone:
                 renderer.strokeColor = UIColor.clear
                 renderer.lineWidth = 0
             }
@@ -735,14 +781,7 @@ extension MapKitLandingMapView {
                 return
             }
 
-            if let jumpRunAnnotation = annotation as? JumpRunHandleAnnotation {
-                switch jumpRunAnnotation.role {
-                case .start:
-                    parent.onJumpRunStartChange(annotation.coordinate)
-                case .end:
-                    parent.onJumpRunEndChange(annotation.coordinate)
-                }
-            }
+
         }
 
         private func manualWaypointLabel(for waypoint: PatternWaypoint) -> String {

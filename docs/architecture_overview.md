@@ -9,7 +9,7 @@ Landing Pattern Simulator is a **local-first skydiving flight-path planner** for
 1. **Canopy mode** — plan a standard downwind/base/final landing pattern, given canopy performance, jumper weight, and wind layers at 900/600/300 ft.
 2. **Wingsuit mode** — plan a three-leg freefall route from exit to deployment, either manually or via the **auto solver** that resolves jump-run geometry and sweeps valid routes automatically.
 
-The app runs on **web** (React + Vite) and **iOS** (SwiftUI). Both platforms share the same domain concepts but have **independent engine implementations** (TypeScript and Swift). The web app is the feature leader; iOS lags on wingsuit auto mode.
+The app runs on **web** (React + Vite) and **iOS** (SwiftUI). Both platforms share the same domain concepts but have **independent engine implementations** (TypeScript and Swift). The web app is the feature leader; iOS now ports the forward-parametric wingsuit auto solver and verifies it with TypeScript-generated fixtures.
 
 ## User-Facing Modes and Flows
 
@@ -80,11 +80,11 @@ Both modes share the same `computePattern()` entry point for the basic three-leg
 - **Canopy**: Airspeed is derived from `canopy.airspeedRefKt`, wing loading, and WL exponent. Sink rate is `airspeed / glideRatio`. Gates are typically 900/600/300/0 ft.
 - **Wingsuit**: Airspeed and fall rate are user-specified directly. Gates are at much higher altitudes. The first and/or second legs can be collapsed (equal gate values) to produce a 2-leg pattern.
 
-**Wingsuit auto mode** bypasses `computePattern` entirely and uses `solveWingsuitAuto()`, which resolves jump-run geometry, sweeps candidate routes, and returns a rich output with zones, corridors, bands, and diagnostics.
+**Wingsuit auto mode** bypasses `computePattern` entirely and uses `solveWingsuitAuto()`, which resolves jump-run geometry, sweeps candidate routes, and returns a rich output with zones, corridors, bands, and diagnostics. The TypeScript implementation remains the source of truth; the Swift solver is a port covered by parity fixtures.
 
 ## Where Wingsuit Auto Mode Fits
 
-Auto mode is a **web-only** feature (iOS has the code scaffolded but gated by `iosWingsuitAutoModeEnabled = false`). It is the most complex subsystem:
+Auto mode is implemented on web and iOS. It is the most complex subsystem:
 
 1. **Jump-run resolution** — heading from wind or manual input, optional reciprocal constraint, spot/crosswind offset tables, slot placement
 2. **Forward route sweep** — varies first-leg heading, offset heading, return heading, and altitude-drop fractions; integrates each candidate forward through altitude-dependent wind layers
@@ -99,7 +99,7 @@ See [Wingsuit Auto Mode](wingsuit-auto-mode.md) for full technical details.
 |---------|-----|-----|
 | Canopy pattern solver | ✅ | ✅ |
 | Wingsuit manual pattern | ✅ | ✅ |
-| Wingsuit auto mode | ✅ | ❌ (gated off) |
+| Wingsuit auto mode | ✅ | ✅ |
 | NOAA surface wind | ✅ | ✅ |
 | Open-Meteo upper-air winds | ✅ | ✅ |
 | Wind shear extrapolation | ✅ | ✅ |
@@ -112,7 +112,7 @@ See [Wingsuit Auto Mode](wingsuit-auto-mode.md) for full technical details.
 | i18n (English + Chinese) | ✅ | ✅ |
 | Unit toggle (imperial/metric) | ✅ | Partial |
 | Parity test fixtures | ✅ (generates) | ✅ (consumes) |
-| Distance jump-run placement | ✅ | ❌ |
+| Distance jump-run placement | ✅ | ✅ (engine/input contract; UI controls still minimal) |
 
 See [Web / iOS Feature Status](web_ios_feature_status.md) for detailed comparison.
 

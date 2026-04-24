@@ -178,14 +178,14 @@ SwiftUI observes changes to the `@Published` inputs and re-renders the map view.
 | Waypoint annotations | `MKAnnotation` subclass | Circle + altitude label |
 | Touchdown marker | `MKAnnotationView` (draggable) | Drag triggers `onTouchdownChange` |
 | Heading handle | Custom annotation (draggable) | Constrained circular drag around touchdown |
-| Auto overlays | `MKPolygon` / `MKPolyline` | Zones, jump-run, route (when auto mode enabled) |
+| Auto overlays | `MKPolygon` / `MKPolyline` | Zones, jump-run, route |
 
 ### Step 3: Overlay rendering
 
 MapKit delegates handle visual styling via `MKMapViewDelegate.rendererForOverlay`:
 
 - Pattern polylines: green stroke, matching web appearance
-- Zone polygons: colored fills with varying opacity
+- Zone polygons: colored fills with varying opacity for feasible region, jump-run corridor, min deploy radius, and wind no-deploy half-disk
 - Arrow overlays: short line segments with chevron end caps
 
 ### Step 4: Interaction handling
@@ -193,7 +193,8 @@ MapKit delegates handle visual styling via `MKMapViewDelegate.rendererForOverlay
 MapKit uses its built-in annotation dragging:
 - Touchdown annotation: `isDraggable = true`, drag end updates `LandingStore`
 - Heading handle: custom `UIPanGestureRecognizer` computes bearing from touchdown
-- Jump-run endpoints (auto mode): protocol declares handlers but not yet implemented
+- Auto mode landing point: draggable landing annotation updates `LandingStore`
+- Jump-run endpoints: not draggable; the line is rendered from `resolvedJumpRun`
 
 ### Map basemap
 

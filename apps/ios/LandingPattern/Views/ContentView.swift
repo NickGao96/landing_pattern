@@ -84,8 +84,6 @@ struct ContentView: View {
                         waypoints: manualOutput.waypoints,
                         autoOutput: autoOutput,
                         landingPoint: store.wingsuitAutoLandingPoint,
-                        jumpRunStart: store.wingsuitAutoJumpRunStart,
-                        jumpRunEnd: store.wingsuitAutoJumpRunEnd,
                         blocked: blocked,
                         hasWarnings: hasWarnings,
                         landingHeadingDeg: store.landingHeadingDeg,
@@ -99,12 +97,6 @@ struct ContentView: View {
                         },
                         onLandingPointChange: { coordinate in
                             store.setLandingPoint(coordinate)
-                        },
-                        onJumpRunStartChange: { coordinate in
-                            store.setJumpRunStart(coordinate)
-                        },
-                        onJumpRunEndChange: { coordinate in
-                            store.setJumpRunEnd(coordinate)
                         }
                     )
                 case .mapbox:
@@ -114,8 +106,6 @@ struct ContentView: View {
                         waypoints: manualOutput.waypoints,
                         autoOutput: autoOutput,
                         landingPoint: store.wingsuitAutoLandingPoint,
-                        jumpRunStart: store.wingsuitAutoJumpRunStart,
-                        jumpRunEnd: store.wingsuitAutoJumpRunEnd,
                         blocked: blocked,
                         hasWarnings: hasWarnings,
                         landingHeadingDeg: store.landingHeadingDeg,
@@ -129,12 +119,6 @@ struct ContentView: View {
                         },
                         onLandingPointChange: { coordinate in
                             store.setLandingPoint(coordinate)
-                        },
-                        onJumpRunStartChange: { coordinate in
-                            store.setJumpRunStart(coordinate)
-                        },
-                        onJumpRunEndChange: { coordinate in
-                            store.setJumpRunEnd(coordinate)
                         }
                     )
                 }
@@ -249,8 +233,6 @@ struct ContentView: View {
             if store.isWingsuitAutoMode {
                 Group {
                     Text("\(t.landingPointLabel): \(formatCoordinate(store.wingsuitAutoLandingPoint))")
-                    Text("\(t.jumpRunStartLabel): \(formatCoordinate(store.wingsuitAutoJumpRunStart))")
-                    Text("\(t.jumpRunEndLabel): \(formatCoordinate(store.wingsuitAutoJumpRunEnd))")
                     Text(t.autoModeMapHint)
                 }
                 .font(.caption)
@@ -277,15 +259,7 @@ struct ContentView: View {
                     NumericInput(title: t.autoExitHeightLabel, value: $store.wingsuitAutoExitHeightFt, precision: 0)
                     NumericInput(title: t.autoDeployHeightLabel, value: $store.wingsuitAutoDeployHeightFt, precision: 0)
                 }
-                HStack(spacing: 12) {
-                    Button(t.reverseJumpRunButton) {
-                        store.reverseJumpRun()
-                    }
-                    .buttonStyle(.bordered)
-                    Text(t.autoModeMapHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+
             } else {
                 HStack(spacing: 12) {
                     Picker(t.sideLabel, selection: $store.side) {
@@ -491,8 +465,8 @@ struct ContentView: View {
                 if let corridorMargin = autoOutput.diagnostics.corridorMarginFt {
                     Text(String(format: "\(t.autoCorridorMarginLabel): %.0f ft", corridorMargin))
                 }
-                if let envelopeMargin = autoOutput.diagnostics.deployEnvelopeMarginFt {
-                    Text(String(format: "\(t.autoEnvelopeMarginLabel): %.0f ft", envelopeMargin))
+                if let radiusMargin = autoOutput.diagnostics.deployRadiusMarginFt {
+                    Text(String(format: "\(t.autoEnvelopeMarginLabel): %.0f ft", radiusMargin))
                 }
             } else {
                 if store.mode == .canopy {

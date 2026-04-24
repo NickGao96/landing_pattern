@@ -65,438 +65,6 @@
         ]
       },
       "output": {
-        "blocked": true,
-        "warnings": [
-          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated.",
-          "No deploy point returns exit to the resolved jump run; closest miss is 480 ft."
-        ],
-        "landingPoint": {
-          "name": "landing",
-          "lat": 37,
-          "lng": -122,
-          "altFt": 0
-        },
-        "resolvedJumpRun": {
-          "line": {
-            "start": {
-              "lat": 36.995879120879124,
-              "lng": -122.00181628469095
-            },
-            "end": {
-              "lat": 37.012362637362635,
-              "lng": -122.00181628469095
-            }
-          },
-          "headingDeg": 0,
-          "lengthFt": 6000,
-          "crosswindOffsetFt": 528,
-          "planeGroundSpeedKt": 85,
-          "groupSpacingFt": 1500,
-          "groupSpacingSec": 10.455588725157812,
-          "slots": [
-            {
-              "lat": 37,
-              "lng": -122.00181628469095,
-              "label": "G1",
-              "index": 0,
-              "kind": "group",
-              "altFt": 12000
-            },
-            {
-              "lat": 37.004120879120876,
-              "lng": -122.00181628469095,
-              "label": "G2",
-              "index": 1,
-              "kind": "group",
-              "altFt": 12000
-            },
-            {
-              "lat": 37.00824175824176,
-              "lng": -122.00181628469095,
-              "label": "G3",
-              "index": 2,
-              "kind": "group",
-              "altFt": 12000
-            },
-            {
-              "lat": 37.012362637362635,
-              "lng": -122.00181628469095,
-              "label": "WS",
-              "index": 3,
-              "kind": "wingsuit",
-              "altFt": 12000
-            }
-          ]
-        },
-        "deployPoint": null,
-        "exitPoint": null,
-        "turnPoints": [],
-        "routeWaypoints": [],
-        "routeSegments": [],
-        "landingNoDeployZonePolygon": [
-          {
-            "lat": 37.002747252747255,
-            "lng": -122
-          },
-          {
-            "lat": 37.002705515804976,
-            "lng": -121.99940266188123
-          },
-          {
-            "lat": 37.00258157313403,
-            "lng": -121.99882347357894
-          },
-          {
-            "lat": 37.002379190669735,
-            "lng": -121.9982800334366
-          },
-          {
-            "lat": 37.00210451770088,
-            "lng": -121.99778885360794
-          },
-          {
-            "lat": 37.00176590002661,
-            "lng": -121.99736485834352
-          },
-          {
-            "lat": 37.00137362637363,
-            "lng": -121.99702093052487
-          },
-          {
-            "lat": 37.000939615778364,
-            "lng": -121.99676752022475
-          },
-          {
-            "lat": 37.00047705543315,
-            "lng": -121.99661232718688
-          },
-          {
-            "lat": 37,
-            "lng": -121.9965600668732
-          },
-          {
-            "lat": 36.99952294456685,
-            "lng": -121.99661232718688
-          },
-          {
-            "lat": 36.999060384221636,
-            "lng": -121.99676752022475
-          },
-          {
-            "lat": 36.99862637362637,
-            "lng": -121.99702093052487
-          },
-          {
-            "lat": 36.99823409997339,
-            "lng": -121.99736485834352
-          },
-          {
-            "lat": 36.99789548229912,
-            "lng": -121.99778885360794
-          },
-          {
-            "lat": 36.997620809330265,
-            "lng": -121.9982800334366
-          },
-          {
-            "lat": 36.99741842686597,
-            "lng": -121.99882347357894
-          },
-          {
-            "lat": 36.997294484195024,
-            "lng": -121.99940266188123
-          },
-          {
-            "lat": 36.997252747252745,
-            "lng": -122
-          },
-          {
-            "lat": 36.997294484195024,
-            "lng": -122.00059733811877
-          },
-          {
-            "lat": 36.99741842686597,
-            "lng": -122.00117652642106
-          },
-          {
-            "lat": 36.997620809330265,
-            "lng": -122.0017199665634
-          },
-          {
-            "lat": 36.99789548229912,
-            "lng": -122.00221114639206
-          },
-          {
-            "lat": 36.99823409997339,
-            "lng": -122.00263514165648
-          },
-          {
-            "lat": 36.99862637362637,
-            "lng": -122.00297906947513
-          },
-          {
-            "lat": 36.999060384221636,
-            "lng": -122.00323247977525
-          },
-          {
-            "lat": 36.99952294456685,
-            "lng": -122.00338767281312
-          },
-          {
-            "lat": 37,
-            "lng": -122.0034399331268
-          },
-          {
-            "lat": 37.00047705543315,
-            "lng": -122.00338767281312
-          },
-          {
-            "lat": 37.000939615778364,
-            "lng": -122.00323247977525
-          },
-          {
-            "lat": 37.00137362637363,
-            "lng": -122.00297906947513
-          },
-          {
-            "lat": 37.00176590002661,
-            "lng": -122.00263514165648
-          },
-          {
-            "lat": 37.00210451770088,
-            "lng": -122.00221114639206
-          },
-          {
-            "lat": 37.002379190669735,
-            "lng": -122.0017199665634
-          },
-          {
-            "lat": 37.00258157313403,
-            "lng": -122.00117652642106
-          },
-          {
-            "lat": 37.002705515804976,
-            "lng": -122.00059733811877
-          }
-        ],
-        "downwindDeployForbiddenZonePolygon": [
-          {
-            "lat": 37,
-            "lng": -122
-          },
-          {
-            "lat": 37.01802747252747,
-            "lng": -122
-          },
-          {
-            "lat": 37.01787324500092,
-            "lng": -121.99705365299344
-          },
-          {
-            "lat": 37.017413201297,
-            "lng": -121.99415771880103
-          },
-          {
-            "lat": 37.01665521289104,
-            "lng": -121.99136174765974
-          },
-          {
-            "lat": 37.015612249174815,
-            "lng": -121.98871357941096
-          },
-          {
-            "lat": 37.01430215554668,
-            "lng": -121.98625852494764
-          },
-          {
-            "lat": 37.01274734807183,
-            "lng": -121.98403859093233
-          },
-          {
-            "lat": 37.01097442993724,
-            "lng": -121.9820917610515
-          },
-          {
-            "lat": 37.00901373626374,
-            "lng": -121.98045134610419
-          },
-          {
-            "lat": 37.00689881506368,
-            "lng": -121.97914541404495
-          },
-          {
-            "lat": 37.00466585322517,
-            "lng": -121.97819630973338
-          },
-          {
-            "lat": 37.002353057344365,
-            "lng": -121.97762027260738
-          },
-          {
-            "lat": 37,
-            "lng": -121.97742715882192
-          },
-          {
-            "lat": 36.997646942655635,
-            "lng": -121.97762027260738
-          },
-          {
-            "lat": 36.99533414677483,
-            "lng": -121.97819630973338
-          },
-          {
-            "lat": 36.99310118493632,
-            "lng": -121.97914541404495
-          },
-          {
-            "lat": 36.99098626373626,
-            "lng": -121.98045134610419
-          },
-          {
-            "lat": 36.98902557006276,
-            "lng": -121.9820917610515
-          },
-          {
-            "lat": 36.98725265192817,
-            "lng": -121.98403859093233
-          },
-          {
-            "lat": 36.98569784445332,
-            "lng": -121.98625852494764
-          },
-          {
-            "lat": 36.984387750825185,
-            "lng": -121.98871357941096
-          },
-          {
-            "lat": 36.98334478710896,
-            "lng": -121.99136174765974
-          },
-          {
-            "lat": 36.982586798703,
-            "lng": -121.99415771880103
-          },
-          {
-            "lat": 36.98212675499908,
-            "lng": -121.99705365299344
-          },
-          {
-            "lat": 36.98197252747253,
-            "lng": -122
-          }
-        ],
-        "forbiddenZonePolygon": [
-          {
-            "lat": 36.96136813186814,
-            "lng": -122.00267626797265
-          },
-          {
-            "lat": 37.04687362637362,
-            "lng": -122.00267626797265
-          },
-          {
-            "lat": 37.04687362637362,
-            "lng": -122.00095630140925
-          },
-          {
-            "lat": 36.96136813186814,
-            "lng": -122.00095630140925
-          }
-        ],
-        "feasibleDeployRegionPolygon": [],
-        "deployBandsByBearing": [],
-        "diagnostics": {
-          "headingSource": "manual",
-          "constrainedHeadingApplied": false,
-          "resolvedHeadingDeg": 0,
-          "headwindComponentKt": -7.347880794884119e-16,
-          "crosswindComponentKt": -12,
-          "crosswindOffsetFt": 528,
-          "firstSlickReturnMarginFt": 5000,
-          "lastSlickReturnMarginFt": 2000,
-          "preferredDeployBearingDeg": 270,
-          "selectedDeployBearingDeg": 195.625,
-          "selectedDeployRadiusFt": 3687.5,
-          "exitToJumpRunErrorFt": 479.8934223445083,
-          "deployRadiusMarginFt": 2874.5,
-          "firstLegTrackDeltaDeg": 0,
-          "corridorMarginFt": 215.19144895422505,
-          "turnHeightsFt": [
-            10000,
-            10000
-          ],
-          "failureReason": "No deploy point returns exit to the resolved jump run; closest miss is 480 ft."
-        }
-      }
-    },
-    {
-      "name": "auto_custom_turn_ratios",
-      "input": {
-        "landingPoint": {
-          "lat": 37,
-          "lng": -122
-        },
-        "jumpRun": {
-          "directionMode": "manual",
-          "manualHeadingDeg": 0,
-          "constraintMode": "none",
-          "constraintHeadingDeg": 0,
-          "assumptions": {
-            "planeAirspeedKt": 85,
-            "groupCount": 4,
-            "groupSeparationFt": 1500,
-            "slickDeployHeightFt": 3000,
-            "slickFallRateFps": 176,
-            "slickReturnRadiusFt": 5000
-          }
-        },
-        "side": "left",
-        "exitHeightFt": 12000,
-        "deployHeightFt": 4000,
-        "winds": [
-          {
-            "altitudeFt": 12000,
-            "speedKt": 20,
-            "dirFromDeg": 270,
-            "source": "manual"
-          },
-          {
-            "altitudeFt": 8000,
-            "speedKt": 16,
-            "dirFromDeg": 270,
-            "source": "manual"
-          },
-          {
-            "altitudeFt": 4000,
-            "speedKt": 12,
-            "dirFromDeg": 270,
-            "source": "manual"
-          }
-        ],
-        "wingsuit": {
-          "name": "Squirrel FREAK",
-          "flightSpeedKt": 84,
-          "fallRateFps": 68
-        },
-        "tuning": {
-          "corridorHalfWidthFt": 250,
-          "deployBearingWindowHalfDeg": 70,
-          "deployRadiusStepFt": 250,
-          "minDeployRadiusFt": 1000
-        },
-        "turnRatios": {
-          "turn1": 0.6,
-          "turn2": 0.25
-        }
-      },
-      "validation": {
-        "valid": true,
-        "errors": [],
-        "warnings": [
-          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
-        ]
-      },
-      "output": {
         "blocked": false,
         "warnings": [
           "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
@@ -561,74 +129,83 @@
         },
         "deployPoint": {
           "name": "deploy",
-          "lat": 37.003094324343124,
-          "lng": -122.00271296380322,
+          "lat": 36.99857656589101,
+          "lng": -122.01450151228417,
           "altFt": 4000
         },
         "exitPoint": {
           "name": "exit",
-          "lat": 37.01223053662106,
-          "lng": -122.00271296380322,
+          "lat": 37.012362637362635,
+          "lng": -122.00181628469095,
           "altFt": 12000
         },
         "turnPoints": [
           {
             "name": "turn1",
-            "lat": 37.030032593331214,
-            "lng": -122.00271296380322,
-            "altFt": 8800
+            "lat": 37.02011334115495,
+            "lng": -122.00297812135167,
+            "altFt": 10560
           },
           {
             "name": "turn2",
-            "lat": 37.030032593331214,
-            "lng": -122.00271296380322,
-            "altFt": 8800
+            "lat": 37.02011334115495,
+            "lng": -122.01895748209445,
+            "altFt": 7760
           }
         ],
         "routeWaypoints": [
           {
             "name": "exit",
-            "lat": 37.01223053662106,
-            "lng": -122.00271296380322,
+            "lat": 37.012362637362635,
+            "lng": -122.00181628469095,
             "altFt": 12000
           },
           {
             "name": "turn1",
-            "lat": 37.030032593331214,
-            "lng": -122.00271296380322,
-            "altFt": 8800
+            "lat": 37.02011334115495,
+            "lng": -122.00297812135167,
+            "altFt": 10560
           },
           {
             "name": "turn2",
-            "lat": 37.030032593331214,
-            "lng": -122.00271296380322,
-            "altFt": 8800
+            "lat": 37.02011334115495,
+            "lng": -122.01895748209445,
+            "altFt": 7760
           },
           {
             "name": "deploy",
-            "lat": 37.003094324343124,
-            "lng": -122.00271296380322,
+            "lat": 36.99857656589101,
+            "lng": -122.01450151228417,
             "altFt": 4000
           }
         ],
         "routeSegments": [
           {
             "name": "downwind",
-            "headingDeg": 346.2258530019733,
-            "trackHeadingDeg": 0,
-            "alongLegSpeedKt": 81.58431221748455,
-            "groundSpeedKt": 81.58431221748455,
-            "timeSec": 47.05882352941177,
-            "distanceFt": 6479.948642495455
+            "headingDeg": 340,
+            "trackHeadingDeg": 353.17326260575135,
+            "alongLegSpeedKt": 77.4058516366811,
+            "groundSpeedKt": 79.49780798841202,
+            "timeSec": 21.176470588235293,
+            "distanceFt": 2841.4380644283574
+          },
+          {
+            "name": "base",
+            "headingDeg": 270,
+            "trackHeadingDeg": 270,
+            "alongLegSpeedKt": 66.84,
+            "groundSpeedKt": 66.84,
+            "timeSec": 41.1764705882353,
+            "distanceFt": 4645.253309803922
           },
           {
             "name": "final",
-            "headingDeg": 191.53695903281547,
-            "trackHeadingDeg": 180,
-            "alongLegSpeedKt": 82.30285535751479,
-            "groundSpeedKt": 82.30285535751479,
-            "timeSec": 70.58823529411765,
-            "distanceFt": 9805.52991166476
+            "headingDeg": 180,
+            "trackHeadingDeg": 170.61733511542832,
+            "alongLegSpeedKt": 83.99999999999999,
+            "groundSpeedKt": 85.1390298276883,
+            "timeSec": 55.294117647058826,
+            "distanceFt": 7946.311469502472
           }
         ],
         "landingNoDeployZonePolygon": [
@@ -903,40 +480,1426 @@
         ],
         "feasibleDeployRegionPolygon": [
           {
-            "lat": 37.003094324343124,
-            "lng": -122.00271296380322
+            "lat": 36.9872909722303,
+            "lng": -122.00280596650936
           },
           {
-            "lat": 37.003094324343124,
-            "lng": -122.00271296380322
+            "lat": 36.98589499617845,
+            "lng": -122.00473235203754
+          },
+          {
+            "lat": 36.98884223862651,
+            "lng": -122.00508503938268
+          },
+          {
+            "lat": 36.98896672958671,
+            "lng": -122.00644211085469
+          },
+          {
+            "lat": 36.9864216601548,
+            "lng": -122.00981606510874
+          },
+          {
+            "lat": 36.98549637843671,
+            "lng": -122.01271612021027
+          },
+          {
+            "lat": 36.9873837992742,
+            "lng": -122.01325542032967
+          },
+          {
+            "lat": 36.987360395492956,
+            "lng": -122.01582649950826
+          },
+          {
+            "lat": 36.98869929089483,
+            "lng": -122.01686333816305
+          },
+          {
+            "lat": 36.98966177268205,
+            "lng": -122.0184871803866
+          },
+          {
+            "lat": 36.99109143507567,
+            "lng": -122.01932056223065
+          },
+          {
+            "lat": 36.992802181972024,
+            "lng": -122.01932767874628
+          },
+          {
+            "lat": 36.99406770316182,
+            "lng": -122.02040837328587
+          },
+          {
+            "lat": 36.995356913476925,
+            "lng": -122.02169730069606
+          },
+          {
+            "lat": 36.99690437606042,
+            "lng": -122.02198268865841
+          },
+          {
+            "lat": 36.99842952605051,
+            "lng": -122.02247658557249
+          },
+          {
+            "lat": 37,
+            "lng": -122.02227635924214
+          },
+          {
+            "lat": 37.001553213708156,
+            "lng": -122.02222955741165
+          },
+          {
+            "lat": 37.00312958020164,
+            "lng": -122.02222381934848
+          },
+          {
+            "lat": 37.004648926542615,
+            "lng": -122.02172459130531
+          },
+          {
+            "lat": 37.00603348707195,
+            "lng": -122.02075648938998
+          },
+          {
+            "lat": 37.00759821673114,
+            "lng": -122.02040283478316
+          },
+          {
+            "lat": 37.00900995305808,
+            "lng": -122.01954044902097
+          },
+          {
+            "lat": 37.010156195158906,
+            "lng": -122.01816166410059
+          },
+          {
+            "lat": 37.011540638053106,
+            "lng": -122.01722136905708
+          },
+          {
+            "lat": 37.01253852579401,
+            "lng": -122.01569993524738
+          },
+          {
+            "lat": 37.01352115217681,
+            "lng": -122.01420622256576
+          },
+          {
+            "lat": 37.01456662792931,
+            "lng": -122.0127713613458
+          },
+          {
+            "lat": 37.015420449051746,
+            "lng": -122.01114776427926
+          },
+          {
+            "lat": 37.016334132242484,
+            "lng": -122.00953718042607
+          },
+          {
+            "lat": 37.016906562553714,
+            "lng": -122.00770499865821
+          },
+          {
+            "lat": 37.01607778068224,
+            "lng": -122.00539423591324
+          },
+          {
+            "lat": 37.01748559702052,
+            "lng": -122.00386056278455
+          },
+          {
+            "lat": 37.01733038832665,
+            "lng": -122.00189850375297
+          },
+          {
+            "lat": 37.01421057209169,
+            "lng": -122.00155673513711
+          },
+          {
+            "lat": 37.01257374944604,
+            "lng": -122.00277609904407
+          },
+          {
+            "lat": 37.007629885611664,
+            "lng": -122.00255989329584
+          },
+          {
+            "lat": 37.006081006859446,
+            "lng": -122.00277135872794
+          },
+          {
+            "lat": 37.004836376241435,
+            "lng": -122.00282386551903
+          },
+          {
+            "lat": 37.00392779397031,
+            "lng": -122.00283948419217
+          },
+          {
+            "lat": 37.00313483959433,
+            "lng": -122.00274848574527
+          },
+          {
+            "lat": 37.003726616530265,
+            "lng": -122.00391543140361
+          },
+          {
+            "lat": 37.002644818167404,
+            "lng": -122.00331167113674
+          },
+          {
+            "lat": 37.003142289021966,
+            "lng": -122.00468904047439
+          },
+          {
+            "lat": 37.00245897447109,
+            "lng": -122.0043972243224
+          },
+          {
+            "lat": 37.00160134439969,
+            "lng": -122.00347293580838
+          },
+          {
+            "lat": 37.001536094671856,
+            "lng": -122.00412474227969
+          },
+          {
+            "lat": 37.00146579331988,
+            "lng": -122.00504264335518
+          },
+          {
+            "lat": 37.00086289206899,
+            "lng": -122.00403232388541
+          },
+          {
+            "lat": 37.00066047964925,
+            "lng": -122.00469020745994
+          },
+          {
+            "lat": 37.00037652401497,
+            "lng": -122.00538880268928
+          },
+          {
+            "lat": 37,
+            "lng": -122.00412445580463
+          },
+          {
+            "lat": 36.99966432319847,
+            "lng": -122.00480419834835
+          },
+          {
+            "lat": 36.99896037902044,
+            "lng": -122.00738257125622
+          },
+          {
+            "lat": 36.99832659680571,
+            "lng": -122.00781986984559
+          },
+          {
+            "lat": 36.99900178708327,
+            "lng": -122.00343406649718
+          },
+          {
+            "lat": 36.99521460569324,
+            "lng": -122.0128498057989
+          },
+          {
+            "lat": 36.99826352543249,
+            "lng": -122.00376600105947
+          },
+          {
+            "lat": 36.99833107503825,
+            "lng": -122.00298443010301
+          },
+          {
+            "lat": 36.99816143237557,
+            "lng": -122.00274357894693
+          },
+          {
+            "lat": 36.996445588501174,
+            "lng": -122.00445060538145
+          },
+          {
+            "lat": 36.997378469921735,
+            "lng": -122.00275435401271
+          },
+          {
+            "lat": 36.99676189950314,
+            "lng": -122.00283902023996
+          },
+          {
+            "lat": 36.995029072365824,
+            "lng": -122.00359358727681
+          },
+          {
+            "lat": 36.991367279878546,
+            "lng": -122.00504047647857
+          },
+          {
+            "lat": 36.995779517575905,
+            "lng": -122.00192344311928
+          },
+          {
+            "lat": 36.99022595248229,
+            "lng": -122.0032792783519
+          },
+          {
+            "lat": 36.99149173972973,
+            "lng": -122.00187849879659
           }
         ],
         "deployBandsByBearing": [
           {
+            "bearingDeg": 190,
+            "minRadiusFt": 3144.783059337233,
+            "maxRadiusFt": 4697.450943113294
+          },
+          {
+            "bearingDeg": 195,
+            "minRadiusFt": 3683.2572435848365,
+            "maxRadiusFt": 5315.33711109938
+          },
+          {
+            "bearingDeg": 200,
+            "minRadiusFt": 1634.8490648858167,
+            "maxRadiusFt": 4322.078358509697
+          },
+          {
+            "bearingDeg": 205,
+            "minRadiusFt": 3467.1556055859387,
+            "maxRadiusFt": 4431.2875690604415
+          },
+          {
+            "bearingDeg": 210,
+            "minRadiusFt": 2089.33554481538,
+            "maxRadiusFt": 5707.125543957902
+          },
+          {
+            "bearingDeg": 215,
+            "minRadiusFt": 1438.888652080036,
+            "maxRadiusFt": 6444.857564409622
+          },
+          {
+            "bearingDeg": 220,
+            "minRadiusFt": 1245.6678683067169,
+            "maxRadiusFt": 5994.818062375276
+          },
+          {
+            "bearingDeg": 225,
+            "minRadiusFt": 1829.7176890346652,
+            "maxRadiusFt": 6506.536442549716
+          },
+          {
+            "bearingDeg": 230,
+            "minRadiusFt": 1041.1504596660209,
+            "maxRadiusFt": 6399.404799181405
+          },
+          {
+            "bearingDeg": 235,
+            "minRadiusFt": 1059.1242031167003,
+            "maxRadiusFt": 6560.790341520294
+          },
+          {
+            "bearingDeg": 240,
+            "minRadiusFt": 1264.1534851463337,
+            "maxRadiusFt": 6485.435264915322
+          },
+          {
+            "bearingDeg": 245,
+            "minRadiusFt": 4121.64756081495,
+            "maxRadiusFt": 6199.461782346797
+          },
+          {
+            "bearingDeg": 250,
+            "minRadiusFt": 1062.3628718307991,
+            "maxRadiusFt": 6313.534717870614
+          },
+          {
+            "bearingDeg": 255,
+            "minRadiusFt": 2353.4541767609,
+            "maxRadiusFt": 6529.9811833005
+          },
+          {
+            "bearingDeg": 260,
+            "minRadiusFt": 2179.2456543106664,
+            "maxRadiusFt": 6489.023548342107
+          },
+          {
+            "bearingDeg": 265,
+            "minRadiusFt": 1401.9312084866056,
+            "maxRadiusFt": 6558.977063276986
+          },
+          {
+            "bearingDeg": 270,
+            "minRadiusFt": 1198.9930189316437,
+            "maxRadiusFt": 6475.811715224194
+          },
+          {
+            "bearingDeg": 275,
+            "minRadiusFt": 1572.526802326366,
+            "maxRadiusFt": 6486.890845566158
+          },
+          {
+            "bearingDeg": 280,
+            "minRadiusFt": 1384.4924580015374,
+            "maxRadiusFt": 6560.202408693814
+          },
+          {
+            "bearingDeg": 285,
+            "minRadiusFt": 1213.5610537713108,
+            "maxRadiusFt": 6538.194516716537
+          },
+          {
+            "bearingDeg": 290,
+            "minRadiusFt": 1559.9922368548612,
+            "maxRadiusFt": 6421.227921944767
+          },
+          {
+            "bearingDeg": 295,
+            "minRadiusFt": 1323.0343105653512,
+            "maxRadiusFt": 6544.3241348396805
+          },
+          {
+            "bearingDeg": 300,
+            "minRadiusFt": 1165.77872297524,
+            "maxRadiusFt": 6559.245826284372
+          },
+          {
+            "bearingDeg": 305,
+            "minRadiusFt": 1560.5011830190147,
+            "maxRadiusFt": 6445.270069601895
+          },
+          {
+            "bearingDeg": 310,
+            "minRadiusFt": 1779.4263404561623,
+            "maxRadiusFt": 6535.2725970842075
+          },
+          {
+            "bearingDeg": 315,
+            "minRadiusFt": 1361.4829309357528,
+            "maxRadiusFt": 6454.503775738541
+          },
+          {
+            "bearingDeg": 320,
+            "minRadiusFt": 1770.7698674679575,
+            "maxRadiusFt": 6424.822262684558
+          },
+          {
             "bearingDeg": 325,
-            "minRadiusFt": 1375,
-            "maxRadiusFt": 1375
+            "minRadiusFt": 1393.0034360445416,
+            "maxRadiusFt": 6472.855196098243
+          },
+          {
+            "bearingDeg": 330,
+            "minRadiusFt": 1650.8949956265762,
+            "maxRadiusFt": 6481.384299243241
+          },
+          {
+            "bearingDeg": 335,
+            "minRadiusFt": 1942.431673945086,
+            "maxRadiusFt": 6560.270386403613
+          },
+          {
+            "bearingDeg": 340,
+            "minRadiusFt": 2355.5431296116376,
+            "maxRadiusFt": 6548.938060622346
+          },
+          {
+            "bearingDeg": 345,
+            "minRadiusFt": 2875.2501352152035,
+            "maxRadiusFt": 6058.75938820087
+          },
+          {
+            "bearingDeg": 350,
+            "minRadiusFt": 4647.450006725754,
+            "maxRadiusFt": 6462.943956321683
+          },
+          {
+            "bearingDeg": 355,
+            "minRadiusFt": 5192.406917325583,
+            "maxRadiusFt": 6332.357884441569
           }
         ],
         "diagnostics": {
           "headingSource": "manual",
+          "placementMode": "normal",
           "constrainedHeadingApplied": false,
           "resolvedHeadingDeg": 0,
+          "normalJumpRunHeadingDeg": 0,
+          "distanceOffsiteFt": null,
           "headwindComponentKt": -7.347880794884119e-16,
           "crosswindComponentKt": -12,
           "crosswindOffsetFt": 528,
           "firstSlickReturnMarginFt": 5000,
           "lastSlickReturnMarginFt": 2000,
           "preferredDeployBearingDeg": 270,
-          "selectedDeployBearingDeg": 325,
-          "selectedDeployRadiusFt": 1375,
-          "exitToJumpRunErrorFt": 265.06552617150265,
-          "deployRadiusMarginFt": 5187,
-          "firstLegTrackDeltaDeg": 0,
-          "corridorMarginFt": 10.667599984345202,
+          "selectedDeployBearingDeg": 262.99310759824675,
+          "selectedDeployRadiusFt": 4247.3593183543635,
+          "exitToJumpRunErrorFt": 0,
+          "deployRadiusMarginFt": 2314.6406816456365,
+          "firstLegTrackDeltaDeg": 6.826737394248653,
+          "corridorMarginFt": 2822.6204951361547,
           "turnHeightsFt": [
-            8800,
-            8800
+            10560,
+            7760
+          ],
+          "failureReason": null
+        }
+      }
+    },
+    {
+      "name": "auto_custom_turn_ratios",
+      "input": {
+        "landingPoint": {
+          "lat": 37,
+          "lng": -122
+        },
+        "jumpRun": {
+          "directionMode": "manual",
+          "manualHeadingDeg": 0,
+          "constraintMode": "none",
+          "constraintHeadingDeg": 0,
+          "assumptions": {
+            "planeAirspeedKt": 85,
+            "groupCount": 4,
+            "groupSeparationFt": 1500,
+            "slickDeployHeightFt": 3000,
+            "slickFallRateFps": 176,
+            "slickReturnRadiusFt": 5000
+          }
+        },
+        "side": "left",
+        "exitHeightFt": 12000,
+        "deployHeightFt": 4000,
+        "winds": [
+          {
+            "altitudeFt": 12000,
+            "speedKt": 20,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 8000,
+            "speedKt": 16,
+            "dirFromDeg": 270,
+            "source": "manual"
+          },
+          {
+            "altitudeFt": 4000,
+            "speedKt": 12,
+            "dirFromDeg": 270,
+            "source": "manual"
+          }
+        ],
+        "wingsuit": {
+          "name": "Squirrel FREAK",
+          "flightSpeedKt": 84,
+          "fallRateFps": 68
+        },
+        "tuning": {
+          "corridorHalfWidthFt": 250,
+          "deployBearingWindowHalfDeg": 70,
+          "deployRadiusStepFt": 250,
+          "minDeployRadiusFt": 1000
+        },
+        "turnRatios": {
+          "turn1": 0.6,
+          "turn2": 0.25
+        }
+      },
+      "validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ]
+      },
+      "output": {
+        "blocked": false,
+        "warnings": [
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
+        ],
+        "landingPoint": {
+          "name": "landing",
+          "lat": 37,
+          "lng": -122,
+          "altFt": 0
+        },
+        "resolvedJumpRun": {
+          "line": {
+            "start": {
+              "lat": 36.995879120879124,
+              "lng": -122.00181628469095
+            },
+            "end": {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095
+            }
+          },
+          "headingDeg": 0,
+          "lengthFt": 6000,
+          "crosswindOffsetFt": 528,
+          "planeGroundSpeedKt": 85,
+          "groupSpacingFt": 1500,
+          "groupSpacingSec": 10.455588725157812,
+          "slots": [
+            {
+              "lat": 37,
+              "lng": -122.00181628469095,
+              "label": "G1",
+              "index": 0,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.004120879120876,
+              "lng": -122.00181628469095,
+              "label": "G2",
+              "index": 1,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.00824175824176,
+              "lng": -122.00181628469095,
+              "label": "G3",
+              "index": 2,
+              "kind": "group",
+              "altFt": 12000
+            },
+            {
+              "lat": 37.012362637362635,
+              "lng": -122.00181628469095,
+              "label": "WS",
+              "index": 3,
+              "kind": "wingsuit",
+              "altFt": 12000
+            }
+          ]
+        },
+        "deployPoint": {
+          "name": "deploy",
+          "lat": 36.99857656589101,
+          "lng": -122.01450151228417,
+          "altFt": 4000
+        },
+        "exitPoint": {
+          "name": "exit",
+          "lat": 37.012362637362635,
+          "lng": -122.00181628469095,
+          "altFt": 12000
+        },
+        "turnPoints": [
+          {
+            "name": "turn1",
+            "lat": 37.02011334115495,
+            "lng": -122.00297812135167,
+            "altFt": 10560
+          },
+          {
+            "name": "turn2",
+            "lat": 37.02011334115495,
+            "lng": -122.01895748209445,
+            "altFt": 7760
+          }
+        ],
+        "routeWaypoints": [
+          {
+            "name": "exit",
+            "lat": 37.012362637362635,
+            "lng": -122.00181628469095,
+            "altFt": 12000
+          },
+          {
+            "name": "turn1",
+            "lat": 37.02011334115495,
+            "lng": -122.00297812135167,
+            "altFt": 10560
+          },
+          {
+            "name": "turn2",
+            "lat": 37.02011334115495,
+            "lng": -122.01895748209445,
+            "altFt": 7760
+          },
+          {
+            "name": "deploy",
+            "lat": 36.99857656589101,
+            "lng": -122.01450151228417,
+            "altFt": 4000
+          }
+        ],
+        "routeSegments": [
+          {
+            "name": "downwind",
+            "headingDeg": 340,
+            "trackHeadingDeg": 353.17326260575135,
+            "alongLegSpeedKt": 77.4058516366811,
+            "groundSpeedKt": 79.49780798841202,
+            "timeSec": 21.176470588235293,
+            "distanceFt": 2841.4380644283574
+          },
+          {
+            "name": "base",
+            "headingDeg": 270,
+            "trackHeadingDeg": 270,
+            "alongLegSpeedKt": 66.84,
+            "groundSpeedKt": 66.84,
+            "timeSec": 41.1764705882353,
+            "distanceFt": 4645.253309803922
+          },
+          {
+            "name": "final",
+            "headingDeg": 180,
+            "trackHeadingDeg": 170.61733511542832,
+            "alongLegSpeedKt": 83.99999999999999,
+            "groundSpeedKt": 85.1390298276883,
+            "timeSec": 55.294117647058826,
+            "distanceFt": 7946.311469502472
+          }
+        ],
+        "landingNoDeployZonePolygon": [
+          {
+            "lat": 37.002747252747255,
+            "lng": -122
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 37,
+            "lng": -121.9965600668732
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -121.99661232718688
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -121.99676752022475
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -121.99702093052487
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -121.99736485834352
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -121.99778885360794
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -121.9982800334366
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -121.99882347357894
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -121.99940266188123
+          },
+          {
+            "lat": 36.997252747252745,
+            "lng": -122
+          },
+          {
+            "lat": 36.997294484195024,
+            "lng": -122.00059733811877
+          },
+          {
+            "lat": 36.99741842686597,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 36.997620809330265,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 36.99789548229912,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 36.99823409997339,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 36.99862637362637,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 36.999060384221636,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 36.99952294456685,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37,
+            "lng": -122.0034399331268
+          },
+          {
+            "lat": 37.00047705543315,
+            "lng": -122.00338767281312
+          },
+          {
+            "lat": 37.000939615778364,
+            "lng": -122.00323247977525
+          },
+          {
+            "lat": 37.00137362637363,
+            "lng": -122.00297906947513
+          },
+          {
+            "lat": 37.00176590002661,
+            "lng": -122.00263514165648
+          },
+          {
+            "lat": 37.00210451770088,
+            "lng": -122.00221114639206
+          },
+          {
+            "lat": 37.002379190669735,
+            "lng": -122.0017199665634
+          },
+          {
+            "lat": 37.00258157313403,
+            "lng": -122.00117652642106
+          },
+          {
+            "lat": 37.002705515804976,
+            "lng": -122.00059733811877
+          }
+        ],
+        "downwindDeployForbiddenZonePolygon": [
+          {
+            "lat": 37,
+            "lng": -122
+          },
+          {
+            "lat": 37.01802747252747,
+            "lng": -122
+          },
+          {
+            "lat": 37.01787324500092,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 37.017413201297,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 37.01665521289104,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 37.015612249174815,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 37.01430215554668,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 37.01274734807183,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 37.01097442993724,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 37.00901373626374,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 37.00689881506368,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 37.00466585322517,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 37.002353057344365,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 37,
+            "lng": -121.97742715882192
+          },
+          {
+            "lat": 36.997646942655635,
+            "lng": -121.97762027260738
+          },
+          {
+            "lat": 36.99533414677483,
+            "lng": -121.97819630973338
+          },
+          {
+            "lat": 36.99310118493632,
+            "lng": -121.97914541404495
+          },
+          {
+            "lat": 36.99098626373626,
+            "lng": -121.98045134610419
+          },
+          {
+            "lat": 36.98902557006276,
+            "lng": -121.9820917610515
+          },
+          {
+            "lat": 36.98725265192817,
+            "lng": -121.98403859093233
+          },
+          {
+            "lat": 36.98569784445332,
+            "lng": -121.98625852494764
+          },
+          {
+            "lat": 36.984387750825185,
+            "lng": -121.98871357941096
+          },
+          {
+            "lat": 36.98334478710896,
+            "lng": -121.99136174765974
+          },
+          {
+            "lat": 36.982586798703,
+            "lng": -121.99415771880103
+          },
+          {
+            "lat": 36.98212675499908,
+            "lng": -121.99705365299344
+          },
+          {
+            "lat": 36.98197252747253,
+            "lng": -122
+          }
+        ],
+        "forbiddenZonePolygon": [
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00267626797265
+          },
+          {
+            "lat": 37.04687362637362,
+            "lng": -122.00095630140925
+          },
+          {
+            "lat": 36.96136813186814,
+            "lng": -122.00095630140925
+          }
+        ],
+        "feasibleDeployRegionPolygon": [
+          {
+            "lat": 36.9872909722303,
+            "lng": -122.00280596650936
+          },
+          {
+            "lat": 36.98589499617845,
+            "lng": -122.00473235203754
+          },
+          {
+            "lat": 36.98884223862651,
+            "lng": -122.00508503938268
+          },
+          {
+            "lat": 36.98896672958671,
+            "lng": -122.00644211085469
+          },
+          {
+            "lat": 36.9864216601548,
+            "lng": -122.00981606510874
+          },
+          {
+            "lat": 36.98549637843671,
+            "lng": -122.01271612021027
+          },
+          {
+            "lat": 36.9873837992742,
+            "lng": -122.01325542032967
+          },
+          {
+            "lat": 36.987360395492956,
+            "lng": -122.01582649950826
+          },
+          {
+            "lat": 36.989169032685794,
+            "lng": -122.01616237200273
+          },
+          {
+            "lat": 36.98966177268205,
+            "lng": -122.0184871803866
+          },
+          {
+            "lat": 36.99109143507567,
+            "lng": -122.01932056223065
+          },
+          {
+            "lat": 36.993101699855195,
+            "lng": -122.01852340925764
+          },
+          {
+            "lat": 36.99406770316182,
+            "lng": -122.02040837328587
+          },
+          {
+            "lat": 36.995356913476925,
+            "lng": -122.02169730069606
+          },
+          {
+            "lat": 36.99690437606042,
+            "lng": -122.02198268865841
+          },
+          {
+            "lat": 36.99842952605051,
+            "lng": -122.02247658557249
+          },
+          {
+            "lat": 37,
+            "lng": -122.02227635924214
+          },
+          {
+            "lat": 37.001553213708156,
+            "lng": -122.02222955741165
+          },
+          {
+            "lat": 37.00312958020164,
+            "lng": -122.02222381934848
+          },
+          {
+            "lat": 37.004648926542615,
+            "lng": -122.02172459130531
+          },
+          {
+            "lat": 37.00606766093967,
+            "lng": -122.02087405482342
+          },
+          {
+            "lat": 37.00755822597422,
+            "lng": -122.02029545105943
+          },
+          {
+            "lat": 37.00900995305808,
+            "lng": -122.01954044902097
+          },
+          {
+            "lat": 37.01033411395821,
+            "lng": -122.01847982473254
+          },
+          {
+            "lat": 37.011540638053106,
+            "lng": -122.01722136905708
+          },
+          {
+            "lat": 37.012692143039615,
+            "lng": -122.01589228487832
+          },
+          {
+            "lat": 37.01372452137868,
+            "lng": -122.01441989578731
+          },
+          {
+            "lat": 37.01464273313362,
+            "lng": -122.01283808695102
+          },
+          {
+            "lat": 37.015448600772686,
+            "lng": -122.01116811574555
+          },
+          {
+            "lat": 37.016334132242484,
+            "lng": -122.00953718042607
+          },
+          {
+            "lat": 37.016906562553714,
+            "lng": -122.00770499865821
+          },
+          {
+            "lat": 37.01623754787225,
+            "lng": -122.00544783920161
+          },
+          {
+            "lat": 37.01748559702052,
+            "lng": -122.00386056278455
+          },
+          {
+            "lat": 37.01733038832665,
+            "lng": -122.00189850375297
+          },
+          {
+            "lat": 37.01421057209169,
+            "lng": -122.00155673513711
+          },
+          {
+            "lat": 37.0102300971369,
+            "lng": -122.00225865506582
+          },
+          {
+            "lat": 37.00911575802756,
+            "lng": -122.00305841647554
+          },
+          {
+            "lat": 37.00620626738311,
+            "lng": -122.00282844497262
+          },
+          {
+            "lat": 37.004836376241435,
+            "lng": -122.00282386551903
+          },
+          {
+            "lat": 37.00392779397031,
+            "lng": -122.00283948419217
+          },
+          {
+            "lat": 37.00409783705613,
+            "lng": -122.003592798418
+          },
+          {
+            "lat": 37.003726616530265,
+            "lng": -122.00391543140361
+          },
+          {
+            "lat": 37.002644818167404,
+            "lng": -122.00331167113674
+          },
+          {
+            "lat": 37.004240665069226,
+            "lng": -122.00632807803767
+          },
+          {
+            "lat": 37.00289467824702,
+            "lng": -122.00517636508349
+          },
+          {
+            "lat": 37.00160134439969,
+            "lng": -122.00347293580838
+          },
+          {
+            "lat": 37.00188861974122,
+            "lng": -122.00507134738477
+          },
+          {
+            "lat": 37.002137939036224,
+            "lng": -122.00735496875896
+          },
+          {
+            "lat": 37.00086289206899,
+            "lng": -122.00403232388541
+          },
+          {
+            "lat": 37.00066047964925,
+            "lng": -122.00469020745994
+          },
+          {
+            "lat": 37.00037652401497,
+            "lng": -122.00538880268928
+          },
+          {
+            "lat": 37,
+            "lng": -122.00412445580463
+          },
+          {
+            "lat": 36.99966432319847,
+            "lng": -122.00480419834835
+          },
+          {
+            "lat": 36.99896037902044,
+            "lng": -122.00738257125622
+          },
+          {
+            "lat": 36.998167783932566,
+            "lng": -122.00856200778463
+          },
+          {
+            "lat": 36.99900178708327,
+            "lng": -122.00343406649718
+          },
+          {
+            "lat": 36.994872461979114,
+            "lng": -122.01376853474785
+          },
+          {
+            "lat": 36.998223389776115,
+            "lng": -122.00385304576906
+          },
+          {
+            "lat": 36.99833107503825,
+            "lng": -122.00298443010301
+          },
+          {
+            "lat": 36.99671154177027,
+            "lng": -122.00490715959918
+          },
+          {
+            "lat": 36.994371869538476,
+            "lng": -122.00704718283963
+          },
+          {
+            "lat": 36.997378469921735,
+            "lng": -122.00275435401271
+          },
+          {
+            "lat": 36.99594270337031,
+            "lng": -122.00355725440345
+          },
+          {
+            "lat": 36.99077634399016,
+            "lng": -122.0066679733285
+          },
+          {
+            "lat": 36.991367279878546,
+            "lng": -122.00504047647857
+          },
+          {
+            "lat": 36.98943868224394,
+            "lng": -122.00481321610356
+          },
+          {
+            "lat": 36.99022595248229,
+            "lng": -122.0032792783519
+          },
+          {
+            "lat": 36.99149173972973,
+            "lng": -122.00187849879659
+          }
+        ],
+        "deployBandsByBearing": [
+          {
+            "bearingDeg": 190,
+            "minRadiusFt": 3144.783059337233,
+            "maxRadiusFt": 4697.450943113294
+          },
+          {
+            "bearingDeg": 195,
+            "minRadiusFt": 3683.2572435848365,
+            "maxRadiusFt": 5315.33711109938
+          },
+          {
+            "bearingDeg": 200,
+            "minRadiusFt": 4091.039535874103,
+            "maxRadiusFt": 4322.078358509697
+          },
+          {
+            "bearingDeg": 205,
+            "minRadiusFt": 3467.1556055859387,
+            "maxRadiusFt": 4431.2875690604415
+          },
+          {
+            "bearingDeg": 210,
+            "minRadiusFt": 3876.804043978439,
+            "maxRadiusFt": 5707.125543957902
+          },
+          {
+            "bearingDeg": 215,
+            "minRadiusFt": 1802.9082433516505,
+            "maxRadiusFt": 6444.857564409622
+          },
+          {
+            "bearingDeg": 220,
+            "minRadiusFt": 1245.6678683067169,
+            "maxRadiusFt": 5994.818062375276
+          },
+          {
+            "bearingDeg": 225,
+            "minRadiusFt": 2897.2137483335605,
+            "maxRadiusFt": 6506.536442549716
+          },
+          {
+            "bearingDeg": 230,
+            "minRadiusFt": 1862.1995470742213,
+            "maxRadiusFt": 6133.397786391049
+          },
+          {
+            "bearingDeg": 235,
+            "minRadiusFt": 1059.1242031167003,
+            "maxRadiusFt": 6560.790341520294
+          },
+          {
+            "bearingDeg": 240,
+            "minRadiusFt": 1293.3722429859993,
+            "maxRadiusFt": 6485.435264915322
+          },
+          {
+            "bearingDeg": 245,
+            "minRadiusFt": 4416.335044098976,
+            "maxRadiusFt": 5941.487815427341
+          },
+          {
+            "bearingDeg": 250,
+            "minRadiusFt": 1062.3628718307991,
+            "maxRadiusFt": 6313.534717870614
+          },
+          {
+            "bearingDeg": 255,
+            "minRadiusFt": 2576.8066962839207,
+            "maxRadiusFt": 6529.9811833005
+          },
+          {
+            "bearingDeg": 260,
+            "minRadiusFt": 2179.2456543106664,
+            "maxRadiusFt": 6489.023548342107
+          },
+          {
+            "bearingDeg": 265,
+            "minRadiusFt": 1401.9312084866056,
+            "maxRadiusFt": 6558.977063276986
+          },
+          {
+            "bearingDeg": 270,
+            "minRadiusFt": 1198.9930189316437,
+            "maxRadiusFt": 6475.811715224194
+          },
+          {
+            "bearingDeg": 275,
+            "minRadiusFt": 1572.526802326366,
+            "maxRadiusFt": 6486.890845566158
+          },
+          {
+            "bearingDeg": 280,
+            "minRadiusFt": 1384.4924580015374,
+            "maxRadiusFt": 6560.202408693814
+          },
+          {
+            "bearingDeg": 285,
+            "minRadiusFt": 1213.5610537713108,
+            "maxRadiusFt": 6538.194516716537
+          },
+          {
+            "bearingDeg": 290,
+            "minRadiusFt": 2275.3332643452404,
+            "maxRadiusFt": 6457.597966498749
+          },
+          {
+            "bearingDeg": 295,
+            "minRadiusFt": 1626.6632278809236,
+            "maxRadiusFt": 6509.880200832113
+          },
+          {
+            "bearingDeg": 300,
+            "minRadiusFt": 1165.77872297524,
+            "maxRadiusFt": 6559.245826284372
+          },
+          {
+            "bearingDeg": 305,
+            "minRadiusFt": 1837.005175140013,
+            "maxRadiusFt": 6558.179943230212
+          },
+          {
+            "bearingDeg": 310,
+            "minRadiusFt": 2401.418543132829,
+            "maxRadiusFt": 6535.2725970842075
+          },
+          {
+            "bearingDeg": 315,
+            "minRadiusFt": 1361.4829309357528,
+            "maxRadiusFt": 6533.581899280704
+          },
+          {
+            "bearingDeg": 320,
+            "minRadiusFt": 1770.7698674679575,
+            "maxRadiusFt": 6521.456851116618
+          },
+          {
+            "bearingDeg": 325,
+            "minRadiusFt": 1820.9228663103602,
+            "maxRadiusFt": 6506.673453112915
+          },
+          {
+            "bearingDeg": 330,
+            "minRadiusFt": 1650.8949956265762,
+            "maxRadiusFt": 6493.216777111306
+          },
+          {
+            "bearingDeg": 335,
+            "minRadiusFt": 1942.431673945086,
+            "maxRadiusFt": 6560.270386403613
+          },
+          {
+            "bearingDeg": 340,
+            "minRadiusFt": 2404.0641348898125,
+            "maxRadiusFt": 6548.938060622346
+          },
+          {
+            "bearingDeg": 345,
+            "minRadiusFt": 3435.187083442671,
+            "maxRadiusFt": 6118.966140709695
+          },
+          {
+            "bearingDeg": 350,
+            "minRadiusFt": 3781.2002864936144,
+            "maxRadiusFt": 6462.943956321683
+          },
+          {
+            "bearingDeg": 355,
+            "minRadiusFt": 5192.406917325583,
+            "maxRadiusFt": 6332.357884441569
+          }
+        ],
+        "diagnostics": {
+          "headingSource": "manual",
+          "placementMode": "normal",
+          "constrainedHeadingApplied": false,
+          "resolvedHeadingDeg": 0,
+          "normalJumpRunHeadingDeg": 0,
+          "distanceOffsiteFt": null,
+          "headwindComponentKt": -7.347880794884119e-16,
+          "crosswindComponentKt": -12,
+          "crosswindOffsetFt": 528,
+          "firstSlickReturnMarginFt": 5000,
+          "lastSlickReturnMarginFt": 2000,
+          "preferredDeployBearingDeg": 270,
+          "selectedDeployBearingDeg": 262.99310759824675,
+          "selectedDeployRadiusFt": 4247.3593183543635,
+          "exitToJumpRunErrorFt": 0,
+          "deployRadiusMarginFt": 2314.6406816456365,
+          "firstLegTrackDeltaDeg": 6.826737394248653,
+          "corridorMarginFt": 2822.6204951361547,
+          "turnHeightsFt": [
+            10560,
+            7760
           ],
           "failureReason": null
         }
@@ -1006,10 +1969,9 @@
         ]
       },
       "output": {
-        "blocked": true,
+        "blocked": false,
         "warnings": [
-          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated.",
-          "No deploy point returns exit to the resolved jump run; closest miss is 8282 ft."
+          "Lowest wind layer is above the lowest modeled altitude; low winds will be extrapolated."
         ],
         "landingPoint": {
           "name": "landing",
@@ -1069,11 +2031,87 @@
             }
           ]
         },
-        "deployPoint": null,
-        "exitPoint": null,
-        "turnPoints": [],
-        "routeWaypoints": [],
-        "routeSegments": [],
+        "deployPoint": {
+          "name": "deploy",
+          "lat": 37.015449104741165,
+          "lng": -122.0038603242157,
+          "altFt": 4000
+        },
+        "exitPoint": {
+          "name": "exit",
+          "lat": 37.012362637362635,
+          "lng": -122.00181628469095,
+          "altFt": 12000
+        },
+        "turnPoints": [
+          {
+            "name": "turn1",
+            "lat": 37.02614166632676,
+            "lng": -122.00400417532985,
+            "altFt": 9440
+          },
+          {
+            "name": "turn2",
+            "lat": 37.02614166632676,
+            "lng": -122.02025129316469,
+            "altFt": 6640
+          }
+        ],
+        "routeWaypoints": [
+          {
+            "name": "exit",
+            "lat": 37.012362637362635,
+            "lng": -122.00181628469095,
+            "altFt": 12000
+          },
+          {
+            "name": "turn1",
+            "lat": 37.02614166632676,
+            "lng": -122.00400417532985,
+            "altFt": 9440
+          },
+          {
+            "name": "turn2",
+            "lat": 37.02614166632676,
+            "lng": -122.02025129316469,
+            "altFt": 6640
+          },
+          {
+            "name": "deploy",
+            "lat": 37.015449104741165,
+            "lng": -122.0038603242157,
+            "altFt": 4000
+          }
+        ],
+        "routeSegments": [
+          {
+            "name": "downwind",
+            "headingDeg": 340,
+            "trackHeadingDeg": 352.77286184899197,
+            "alongLegSpeedKt": 77.59738291694345,
+            "groundSpeedKt": 79.56631655447234,
+            "timeSec": 37.64705882352941,
+            "distanceFt": 5055.944458233499
+          },
+          {
+            "name": "base",
+            "headingDeg": 270,
+            "trackHeadingDeg": 270,
+            "alongLegSpeedKt": 67.96,
+            "groundSpeedKt": 67.96,
+            "timeSec": 41.1764705882353,
+            "distanceFt": 4723.091186928104
+          },
+          {
+            "name": "final",
+            "headingDeg": 135,
+            "trackHeadingDeg": 129.2427762310279,
+            "alongLegSpeedKt": 93.41866232540482,
+            "groundSpeedKt": 93.89226629849772,
+            "timeSec": 38.8235294117647,
+            "distanceFt": 6152.53812603977
+          }
+        ],
         "landingNoDeployZonePolygon": [
           {
             "lat": 37.002747252747255,
@@ -1344,29 +2382,151 @@
             "lng": -121.89861829088686
           }
         ],
-        "feasibleDeployRegionPolygon": [],
-        "deployBandsByBearing": [],
+        "feasibleDeployRegionPolygon": [
+          {
+            "lat": 37.01249461642293,
+            "lng": -122.01564495475813
+          },
+          {
+            "lat": 37.01352115217681,
+            "lng": -122.01420622256576
+          },
+          {
+            "lat": 37.01456662792931,
+            "lng": -122.0127713613458
+          },
+          {
+            "lat": 37.015420449051746,
+            "lng": -122.01114776427926
+          },
+          {
+            "lat": 37.016334132242484,
+            "lng": -122.00953718042607
+          },
+          {
+            "lat": 37.016906562553714,
+            "lng": -122.00770499865821
+          },
+          {
+            "lat": 37.01607778068224,
+            "lng": -122.00539423591324
+          },
+          {
+            "lat": 37.01748559702052,
+            "lng": -122.00386056278455
+          },
+          {
+            "lat": 37.01733038832665,
+            "lng": -122.00189850375297
+          },
+          {
+            "lat": 37.01421057209169,
+            "lng": -122.00155673513711
+          },
+          {
+            "lat": 37.01257374944604,
+            "lng": -122.00277609904407
+          },
+          {
+            "lat": 37.01231375440338,
+            "lng": -122.00413137220505
+          },
+          {
+            "lat": 37.01225620544871,
+            "lng": -122.00558564440506
+          },
+          {
+            "lat": 37.01309674830172,
+            "lng": -122.00764693524542
+          },
+          {
+            "lat": 37.01275300044168,
+            "lng": -122.00921941003793
+          },
+          {
+            "lat": 37.01245882738631,
+            "lng": -122.010923337046
+          },
+          {
+            "lat": 37.01232968141378,
+            "lng": -122.01295438406717
+          },
+          {
+            "lat": 37.01205146914932,
+            "lng": -122.01509007425503
+          }
+        ],
+        "deployBandsByBearing": [
+          {
+            "bearingDeg": 315,
+            "minRadiusFt": 6203.7798067649765,
+            "maxRadiusFt": 6431.900384712081
+          },
+          {
+            "bearingDeg": 320,
+            "minRadiusFt": 5858.6731813416045,
+            "maxRadiusFt": 6424.822262684558
+          },
+          {
+            "bearingDeg": 325,
+            "minRadiusFt": 5536.228835946313,
+            "maxRadiusFt": 6472.855196098243
+          },
+          {
+            "bearingDeg": 330,
+            "minRadiusFt": 5360.22631724733,
+            "maxRadiusFt": 6481.384299243241
+          },
+          {
+            "bearingDeg": 335,
+            "minRadiusFt": 5260.041290622059,
+            "maxRadiusFt": 6560.270386403613
+          },
+          {
+            "bearingDeg": 340,
+            "minRadiusFt": 4747.572434480997,
+            "maxRadiusFt": 6548.938060622346
+          },
+          {
+            "bearingDeg": 345,
+            "minRadiusFt": 4640.32173158674,
+            "maxRadiusFt": 6058.75938820087
+          },
+          {
+            "bearingDeg": 350,
+            "minRadiusFt": 4647.450006725754,
+            "maxRadiusFt": 6462.943956321683
+          },
+          {
+            "bearingDeg": 355,
+            "minRadiusFt": 5192.406917325583,
+            "maxRadiusFt": 6332.357884441569
+          }
+        ],
         "diagnostics": {
           "headingSource": "manual",
+          "placementMode": "normal",
           "constrainedHeadingApplied": false,
           "resolvedHeadingDeg": 0,
+          "normalJumpRunHeadingDeg": 0,
+          "distanceOffsiteFt": null,
           "headwindComponentKt": -7.347880794884119e-16,
           "crosswindComponentKt": -12,
           "crosswindOffsetFt": 528,
           "firstSlickReturnMarginFt": 5000,
           "lastSlickReturnMarginFt": 2000,
           "preferredDeployBearingDeg": 270,
-          "selectedDeployBearingDeg": 337.5,
-          "selectedDeployRadiusFt": 4875,
-          "exitToJumpRunErrorFt": 8281.74697663134,
-          "deployRadiusMarginFt": 1687,
-          "firstLegTrackDeltaDeg": 0,
-          "corridorMarginFt": 3.912720993347648,
+          "selectedDeployBearingDeg": 348.7144218879117,
+          "selectedDeployRadiusFt": 5734.353885111389,
+          "exitToJumpRunErrorFt": 0,
+          "deployRadiusMarginFt": 827.646114888611,
+          "firstLegTrackDeltaDeg": 7.227138151008035,
+          "corridorMarginFt": 1123.4741257848073,
           "turnHeightsFt": [
-            10000,
-            10000
+            9440,
+            6640
           ],
-          "failureReason": "No deploy point returns exit to the resolved jump run; closest miss is 8282 ft."
+          "failureReason": null
         }
       }
     }

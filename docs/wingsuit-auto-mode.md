@@ -17,9 +17,10 @@ The authoritative web path is:
 - `apps/web/src/components/MapPanel.tsx` renders the returned geometry.
 
 The TypeScript web solver is forward-parametric: it starts at the resolved
-wingsuit slot and integrates route candidates forward to deployment. The iOS
-core still contains an older wingsuit-auto implementation and should not be
-treated as the source of truth for this solver behavior until it is ported.
+wingsuit slot and integrates route candidates forward to deployment. The Swift
+iOS solver is a port of this implementation and is checked against
+TypeScript-generated auto fixtures, but the TypeScript path remains the source
+of truth for behavior changes.
 
 ## Coordinate And Wind Model
 

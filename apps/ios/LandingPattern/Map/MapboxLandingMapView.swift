@@ -11,8 +11,6 @@ struct MapboxLandingMapView: LandingMapViewProtocol {
         waypoints: [PatternWaypoint],
         autoOutput: WingsuitAutoOutput?,
         landingPoint: CLLocationCoordinate2D,
-        jumpRunStart: CLLocationCoordinate2D,
-        jumpRunEnd: CLLocationCoordinate2D,
         blocked: Bool,
         hasWarnings: Bool,
         landingHeadingDeg: Double,
@@ -20,9 +18,7 @@ struct MapboxLandingMapView: LandingMapViewProtocol {
         windLayers: [WindLayer],
         onTouchdownChange: @escaping (CLLocationCoordinate2D) -> Void,
         onHeadingChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onLandingPointChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onJumpRunStartChange: @escaping (CLLocationCoordinate2D) -> Void,
-        onJumpRunEndChange: @escaping (CLLocationCoordinate2D) -> Void
+        onLandingPointChange: @escaping (CLLocationCoordinate2D) -> Void
     ) {
         let style: LandingBasemapStyle = basemapStyle == .tokenlessSatellite ? .tokenlessSatellite : .appleDefault
         inner = MapKitLandingMapView(
@@ -31,8 +27,6 @@ struct MapboxLandingMapView: LandingMapViewProtocol {
             waypoints: waypoints,
             autoOutput: autoOutput,
             landingPoint: landingPoint,
-            jumpRunStart: jumpRunStart,
-            jumpRunEnd: jumpRunEnd,
             blocked: blocked,
             hasWarnings: hasWarnings,
             landingHeadingDeg: landingHeadingDeg,
@@ -40,9 +34,7 @@ struct MapboxLandingMapView: LandingMapViewProtocol {
             windLayers: windLayers,
             onTouchdownChange: onTouchdownChange,
             onHeadingChange: onHeadingChange,
-            onLandingPointChange: onLandingPointChange,
-            onJumpRunStartChange: onJumpRunStartChange,
-            onJumpRunEndChange: onJumpRunEndChange
+            onLandingPointChange: onLandingPointChange
         )
     }
 
