@@ -155,6 +155,29 @@ const defaultWingsuitAutoAssumptions: Required<WingsuitAutoJumpRunAssumptions> =
   slickReturnRadiusFt: 5000,
 };
 
+export function resolveDefaultLanguage(): Language {
+  if (typeof navigator === "undefined") {
+    return "en";
+  }
+
+  const browserLanguages = [
+    ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+    navigator.language,
+  ].filter((language): language is string => typeof language === "string");
+
+  for (const language of browserLanguages) {
+    const normalized = language.toLowerCase();
+    if (normalized === "zh" || normalized.startsWith("zh-")) {
+      return "zh";
+    }
+    if (normalized === "en" || normalized.startsWith("en-")) {
+      return "en";
+    }
+  }
+
+  return "en";
+}
+
 function normalizeHeading(deg: number): number {
   return ((deg % 360) + 360) % 360;
 }
@@ -262,7 +285,7 @@ const defaultWingsuitAutoSettings: WingsuitAutoSettings = {
 export const useAppStore = create<AppStore>()(
   persist(
     (set, get) => ({
-      language: "en",
+      language: resolveDefaultLanguage(),
       unitSystem: "imperial",
       mode: "canopy",
       location: { lat: defaultLat, lng: defaultLng, source: "default" },
@@ -475,7 +498,7 @@ export const useAppStore = create<AppStore>()(
         };
 
         const migrated = {
-          language: state.language ?? "en",
+          language: state.language ?? resolveDefaultLanguage(),
           unitSystem: state.unitSystem ?? "imperial",
           mode: state.mode === "wingsuit" ? "wingsuit" : "canopy",
           location: state.location ?? { lat: defaultLat, lng: defaultLng, source: "default" },

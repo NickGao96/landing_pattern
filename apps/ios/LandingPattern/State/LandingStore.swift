@@ -95,7 +95,7 @@ final class LandingStore: ObservableObject {
     @Published var wingsuitAutoTuning: WingsuitAutoTuning? {
         didSet { persistSettings() }
     }
-    @Published var language: AppLanguage = .en {
+    @Published var language: AppLanguage = AppLanguage.defaultSystemLanguage() {
         didSet {
             if statusMessage == oldValue.strings.ready {
                 statusMessage = language.strings.ready
@@ -103,7 +103,7 @@ final class LandingStore: ObservableObject {
             persistSettings()
         }
     }
-    @Published var statusMessage = AppLanguage.en.strings.ready
+    @Published var statusMessage = AppLanguage.defaultSystemLanguage().strings.ready
     @Published var locationQuery = ""
     @Published var searchResults: [MKMapItem] = []
     @Published var mapStackChoice: MapStackChoice = .mapKit {
@@ -505,7 +505,7 @@ final class LandingStore: ObservableObject {
 
         mode = snapshot.mode ?? .canopy
         mapStackChoice = snapshot.mapStackChoice ?? .mapKit
-        language = snapshot.language ?? .en
+        language = snapshot.language ?? language
     }
 
     private func requestedWindAltitudes(for gatesFt: [Double]) -> [Double] {

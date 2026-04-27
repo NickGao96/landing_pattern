@@ -6,6 +6,20 @@ enum AppLanguage: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static func defaultSystemLanguage(preferredLanguages: [String] = Locale.preferredLanguages) -> AppLanguage {
+        for preferredLanguage in preferredLanguages {
+            let normalized = preferredLanguage.replacingOccurrences(of: "_", with: "-").lowercased()
+            if normalized == "zh" || normalized.hasPrefix("zh-") {
+                return .zh
+            }
+            if normalized == "en" || normalized.hasPrefix("en-") {
+                return .en
+            }
+        }
+
+        return .en
+    }
+
     var strings: AppStrings {
         switch self {
         case .en:

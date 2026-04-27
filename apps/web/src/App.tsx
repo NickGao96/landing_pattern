@@ -776,7 +776,7 @@ export default function App() {
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [lastSurfaceWind, setLastSurfaceWind] = useState<SurfaceWind | null>(null);
   const [spotName, setSpotName] = useState("");
-  const [statusMessage, setStatusMessage] = useState<string>(translations.en.statusReady);
+  const [statusMessage, setStatusMessage] = useState<string>(t.statusReady);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
